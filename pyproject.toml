@@ -1,0 +1,37 @@
+[project]
+name = "researchops-agent"
+version = "0.1.0"
+description = "ResearchOps multi-tool RAG agent with approvals, tracing, and evals."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic-settings>=2.4.0",
+  "openai>=1.60.0",
+  "openai-agents>=0.3.0",
+  "celery>=5.4.0",
+  "redis>=5.0.0",
+  "psycopg[binary]>=3.2.0",
+  "sqlalchemy>=2.0.0",
+  "opentelemetry-api>=1.27.0",
+  "opentelemetry-sdk>=1.27.0",
+  "python-multipart>=0.0.9",
+  "pypdf>=4.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.6.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

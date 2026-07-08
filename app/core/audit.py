@@ -1,0 +1,65 @@
+import json
+from pathlib import Path
+from threading import Lock
+from uuid import uuid4
+
+from app.api.schemas import AuditRecord
+from app.core.config import settings
+
+
+class AuditService:
+    def __init__(self) -> None:
+        self.data_dir = Path(settings.data_dir)
+        self.state_path = self.data_dir / "audit.json"
+        self._lock = Lock()
+        self._records: list[AuditRecord] = []
+        self._load()
+
+    def record(
+        self,
+        action: str,
+        target: str,
+        risk_level: str,
+        status: str,
+        detail: str = "",
+        run_id: str | None = None,
+        actor_id: str = "local-dev",
+        tenant_id: str = "default",
+    ) -> AuditRecord:
+        record = AuditRecord(
+            audit_id=str(uuid4()),
+            run_id=run_id,
+            actor_id=actor_id,
+            tenant_id=tenant_id,
+            action=action,
+            target=target,
+            risk_level=risk_level,
+            status=status,
+            detail=detail[:500],
+        )
+        with self._lock:
+            self._records.append(record)
+            self._records = self._records[-500:]
+            self._save()
+        return record
+
+    def list_records(self, tenant_id: str | None = None) -> list[AuditRecord]:
+        with self._lock:
+            records = list(self._records)
+        if tenant_id:
+            records = [record for record in records if record.tenant_id == tenant_id]
+        return list(reversed(records[-50:]))
+
+    def _load(self) -> None:
+        if not self.state_path.exists():
+            return
+        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self._records = [AuditRecord.model_validate(item) for item in payload]
+
+    def _save(self) -> None:
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        payload = [record.model_dump() for record in self._records]
+        self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+audit_service = AuditService()
