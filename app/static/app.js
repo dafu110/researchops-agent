@@ -165,7 +165,7 @@ function renderAudit(row) {
 function renderEvalSummary(summary) {
   const coverage = Math.max(0, Math.min(1, Number(summary.citation_coverage || 0)));
   return `
-    <div class="item">
+    <div class="item metric-item">
       <strong>引用覆盖率</strong>
       <div>${coverage.toFixed(2)}</div>
       <div class="bar"><span style="width:${coverage * 100}%"></span></div>
