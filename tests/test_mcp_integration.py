@@ -1,8 +1,11 @@
 import json
 import sys
+from uuid import uuid4
 from pathlib import Path
 
+from app.core.audit import audit_service
 from app.core.config import settings
+from app.tools.builtin import builtin_tools
 from app.tools.mcp import MCPRegistry
 
 
@@ -46,6 +49,28 @@ def test_mcp_tool_allowlist_blocks_unlisted_tool() -> None:
 
     assert "not allowed" in output
     settings.mcp_allowed_tools_json = "{}"
+
+
+def test_builtin_mcp_call_requires_approval_before_execution() -> None:
+    _configure_example_server()
+    run_id = f"mcp-approval-{uuid4()}"
+
+    results = builtin_tools.run(
+        'mcp call example echo {"text":"approval gate must stop this"}',
+        run_id=run_id,
+        actor_id="mcp-test",
+        tenant_id="default",
+    )
+
+    mcp_result = next(result for result in results if result.name == "mcp_call")
+    assert mcp_result.requires_approval is True
+    assert mcp_result.approval_id
+    assert "approval_required" in mcp_result.output
+    assert "approval gate must stop this" not in mcp_result.output
+    assert any(
+        record.target == "mcp_call" and record.status == "blocked"
+        for record in audit_service.list_records(run_id=run_id)
+    )
 
 
 def _configure_example_server() -> None:

@@ -146,6 +146,12 @@ and a short result summary. The audit API supports risk, status, target, and
 run filters, and `GET /api/audit/replay/{run_id}` combines trace steps with
 matching audit records for a run-level replay view.
 
+Direct MCP tool execution is approval-gated in two places. The planner routes
+explicit `mcp call ...` requests to human approval before tool execution, and
+the tool execution layer independently blocks any `mcp_call` without an approved
+run/action approval record. Blocked attempts are written to audit with
+`status=blocked`, so bypass attempts remain visible.
+
 ## Deployment Storage
 
 Local development uses `STORE_BACKEND=auto`, which tries PostgreSQL/pgvector and

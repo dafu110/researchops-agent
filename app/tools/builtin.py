@@ -4,6 +4,8 @@ import operator
 import re
 from dataclasses import dataclass
 
+from app.api.schemas import ApprovalRequest
+from app.approvals.service import approval_service
 from app.core.audit import audit_service
 from app.core.traces import trace_store
 from app.rag.store import knowledge_store
@@ -18,6 +20,8 @@ from app.tools.sql import sql_tool
 class ToolResult:
     name: str
     output: str
+    requires_approval: bool = False
+    approval_id: str | None = None
 
 
 class SafeCalculator:
@@ -201,6 +205,18 @@ class BuiltinTools:
         actor_id: str = "local-dev",
         tenant_id: str = "default",
     ) -> ToolResult:
+        policy = policy_for_tool(name)
+        if policy.requires_approval:
+            approval = self._ensure_tool_approval(name, policy.risk_level, run_id, actor_id, tenant_id)
+            if approval.status != "approved":
+                detail = f"approval_required: {approval.approval_id}"
+                self._audit(name, "blocked", detail, run_id, actor_id, tenant_id)
+                return ToolResult(
+                    name=name,
+                    output=f"approval_required: {name} requires admin approval ({approval.approval_id})",
+                    requires_approval=True,
+                    approval_id=approval.approval_id,
+                )
         try:
             output = callback()
             self._audit(name, "completed", str(output), run_id, actor_id, tenant_id)
@@ -208,6 +224,38 @@ class BuiltinTools:
         except Exception as exc:
             self._audit(name, "failed", str(exc), run_id, actor_id, tenant_id)
             return ToolResult(name=name, output=f"failed: {exc}")
+
+    def _ensure_tool_approval(
+        self,
+        name: str,
+        risk_level: str,
+        run_id: str | None,
+        actor_id: str,
+        tenant_id: str,
+    ):
+        approval_run_id = run_id or "untracked-tool-run"
+        action = self._approval_action(name)
+        existing = approval_service.find_for_run_action(
+            approval_run_id,
+            action,
+            tenant_id=tenant_id,
+            statuses={"pending", "approved"},
+        )
+        if existing:
+            return existing
+        return approval_service.create(
+            ApprovalRequest(
+                run_id=approval_run_id,
+                action=action,
+                reason=f"Tool policy requires approval before executing {name}.",
+                risk_level=risk_level,
+                tenant_id=tenant_id,
+                requester_id=actor_id,
+            )
+        )
+
+    def _approval_action(self, name: str) -> str:
+        return f"tool:{name}"
 
     def _audit(
         self,

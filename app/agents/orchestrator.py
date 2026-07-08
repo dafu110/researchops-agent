@@ -56,15 +56,28 @@ class AgentOrchestrator:
         tool_outputs: list[str] = []
         if any(step.needs_tool for step in plan):
             with timed_step(run_id, "tool_agent"):
-                tool_outputs = [
-                    f"{result.name}: {result.output}"
-                    for result in await self.tool_agent.run(
-                        request.question,
+                tool_results = await self.tool_agent.run(
+                    request.question,
+                    run_id=run_id,
+                    actor_id=user_id,
+                    tenant_id=tenant_id or "default",
+                )
+                approval_result = next(
+                    (result for result in tool_results if result.requires_approval),
+                    None,
+                )
+                if approval_result:
+                    trace_store.set_status(run_id, "awaiting_approval")
+                    return AskResponse(
                         run_id=run_id,
-                        actor_id=user_id,
-                        tenant_id=tenant_id or "default",
+                        answer=approval_result.output,
+                        citations=[],
+                        requires_approval=True,
+                        approval_id=approval_result.approval_id,
+                        plan=[step.name for step in plan],
+                        plan_details=plan_details,
                     )
-                ]
+                tool_outputs = [f"{result.name}: {result.output}" for result in tool_results]
 
         with timed_step(run_id, "rag_research"):
             answer, citations = await self.research.answer(

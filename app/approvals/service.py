@@ -55,6 +55,25 @@ class ApprovalService:
             records = [record for record in records if record.tenant_id == tenant_id]
         return records
 
+    def find_for_run_action(
+        self,
+        run_id: str,
+        action: str,
+        tenant_id: str | None = None,
+        statuses: set[str] | None = None,
+    ) -> ApprovalRecord | None:
+        with self._lock:
+            records = list(self._records.values())
+        matches = [
+            record
+            for record in records
+            if record.run_id == run_id
+            and record.action == action
+            and (tenant_id is None or record.tenant_id == tenant_id)
+            and (statuses is None or record.status in statuses)
+        ]
+        return matches[-1] if matches else None
+
     def _load(self) -> None:
         if not self.state_path.exists():
             return

@@ -39,6 +39,22 @@ def test_high_risk_question_requires_approval() -> None:
     assert any(step.needs_approval for step in response.plan_details)
 
 
+def test_mcp_call_requires_approval() -> None:
+    response = asyncio.run(
+        AgentOrchestrator().answer(
+            AskRequest(
+                question='mcp call example echo {"text":"approval required"}',
+                require_citations=False,
+            )
+        )
+    )
+
+    assert response.requires_approval is True
+    assert response.approval_id
+    assert any(step.tool_hint == "mcp" for step in response.plan_details)
+    assert any(step.needs_approval for step in response.plan_details)
+
+
 def test_private_url_fetch_is_rejected() -> None:
     try:
         fetch_public_url("http://127.0.0.1/internal")

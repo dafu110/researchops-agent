@@ -69,14 +69,15 @@ class PlannerAgent:
                 )
             )
 
-        if risk_level in {"high", "critical"}:
+        requires_tool_approval = self._tool_requires_approval(tool_hint, lowered)
+        if risk_level in {"high", "critical"} or requires_tool_approval:
             plan.append(
                 PlanStep(
                     name="human_approval",
                     stage="approval",
-                    goal="Request approval before executing a high-risk or destructive action.",
+                    goal="Request approval before executing a high-risk, destructive, or externally delegated action.",
                     mode="human_required",
-                    risk_level=risk_level,
+                    risk_level=risk_level if risk_level in {"high", "critical"} else "high",
                     confidence=0.95,
                     needs_approval=True,
                 )
@@ -128,3 +129,6 @@ class PlannerAgent:
 
     def _needs_report(self, lowered: str) -> bool:
         return any(term in lowered for term in ("report", "summary", "analysis", "报告", "总结", "分析"))
+
+    def _tool_requires_approval(self, tool_hint: str | None, lowered: str) -> bool:
+        return tool_hint == "mcp" and "mcp call" in lowered
