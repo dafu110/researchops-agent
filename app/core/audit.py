@@ -43,11 +43,26 @@ class AuditService:
             self._save()
         return record
 
-    def list_records(self, tenant_id: str | None = None) -> list[AuditRecord]:
+    def list_records(
+        self,
+        tenant_id: str | None = None,
+        risk_level: str | None = None,
+        status: str | None = None,
+        target: str | None = None,
+        run_id: str | None = None,
+    ) -> list[AuditRecord]:
         with self._lock:
             records = list(self._records)
         if tenant_id:
             records = [record for record in records if record.tenant_id == tenant_id]
+        if risk_level:
+            records = [record for record in records if record.risk_level == risk_level]
+        if status:
+            records = [record for record in records if record.status == status]
+        if target:
+            records = [record for record in records if record.target == target]
+        if run_id:
+            records = [record for record in records if record.run_id == run_id]
         return list(reversed(records[-50:]))
 
     def _load(self) -> None:

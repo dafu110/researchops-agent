@@ -75,6 +75,10 @@ summaries are tenant-scoped.
 | editor | yes | yes | no |
 | admin | yes | yes | yes |
 
+The API also exposes the runtime permission matrix through
+`GET /api/system/config`, so the dashboard can show the effective RBAC surface
+instead of hard-coding it in the frontend.
+
 ## Tools
 
 Tool Agent supports:
@@ -118,29 +122,40 @@ created -> planner -> tool_agent? -> rag_research -> awaiting_approval | complet
 
 The trace store persists run metadata with `tenant_id`, `user_id`, question, and
 status. This keeps trace timelines auditable and allows tenant-scoped access.
+Ask responses include structured planner details for each step: stage, goal,
+mode, tool hint, risk level, confidence, and approval/tool requirements.
 
 Long-running UI actions can create task records:
 
 ```text
-queued -> running -> completed | failed
+queued -> running -> completed | failed | canceled
 ```
 
 Text ingestion, URL ingestion, and eval runs are exposed through async API
 endpoints with task status records. Celery task functions are available for the
-same workload class when Redis workers are enabled.
+same workload class when Redis workers are enabled. Task records store replay
+payloads, attempt counts, retry limits, and cooperative cancellation flags.
+Admins can recover stale running tasks after worker interruption.
 
 ## Tool Permissions And Audit
 
 Built-in tools have explicit risk levels. Calculator and knowledge stats are
 low risk, SQL and sandbox are medium risk, and MCP calls are high risk. Tool
 calls write audit records with actor, tenant, run ID, target, risk level, status,
-and a short result summary.
+and a short result summary. The audit API supports risk, status, target, and
+run filters, and `GET /api/audit/replay/{run_id}` combines trace steps with
+matching audit records for a run-level replay view.
+
+## Deployment Storage
+
+Local development uses `STORE_BACKEND=auto`, which tries PostgreSQL/pgvector and
+falls back to the JSON store when PostgreSQL is not reachable. Docker Compose
+sets `STORE_BACKEND=postgres` for both the API and worker, making pgvector the
+primary deployment path while keeping JSON as the local fallback.
 
 ## Remaining Production Work
 
-- Persist runs and traces in PostgreSQL.
-- Promote asynchronous PDF/URL/GitHub ingestion routes onto Celery tasks.
+- Persist runs, traces, tasks, approvals, and audits in PostgreSQL.
 - Add stricter MCP server/tool allowlists and enforce per-tool approval policies.
-- Add richer planner state transitions, retries, and resumable failures.
 - Expand evals with adversarial prompt-injection and tool-failure fixtures.
 - Add stronger sandbox isolation defaults for hosted deployments.

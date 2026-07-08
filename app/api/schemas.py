@@ -1,3 +1,5 @@
+import time
+
 from pydantic import BaseModel, Field
 
 
@@ -75,6 +77,18 @@ class Citation(BaseModel):
     excerpt: str
 
 
+class PlanStepDetail(BaseModel):
+    name: str
+    stage: str
+    goal: str
+    mode: str = "automatic"
+    tool_hint: str | None = None
+    risk_level: str = "low"
+    confidence: float = 1.0
+    needs_tool: bool = False
+    needs_approval: bool = False
+
+
 class AskResponse(BaseModel):
     run_id: str
     answer: str
@@ -82,6 +96,7 @@ class AskResponse(BaseModel):
     requires_approval: bool = False
     approval_id: str | None = None
     plan: list[str] = Field(default_factory=list)
+    plan_details: list[PlanStepDetail] = Field(default_factory=list)
 
 
 class IngestResponse(BaseModel):
@@ -98,8 +113,14 @@ class TaskRecord(BaseModel):
     title: str
     tenant_id: str = "default"
     user_id: str = "local-dev"
+    attempts: int = 0
+    max_attempts: int = 3
+    cancel_requested: bool = False
+    payload: dict = Field(default_factory=dict)
     result: dict | None = None
     error: str | None = None
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
 
 
 class TaskCreateResponse(BaseModel):
@@ -117,6 +138,19 @@ class AuditRecord(BaseModel):
     risk_level: str = "low"
     status: str = "completed"
     detail: str = ""
+
+
+class SystemConfigResponse(BaseModel):
+    app_env: str
+    store_backend: str
+    active_store: str
+    task_backend: str
+    auth_required: bool
+    sandbox_mode: str
+    embedding_provider: str
+    agent_runtime: str
+    roles: dict[str, list[str]]
+    limits: dict[str, int | str]
 
 
 class TraceStep(BaseModel):
@@ -138,6 +172,12 @@ class RunRecord(BaseModel):
 class RunTraceResponse(BaseModel):
     run_id: str
     steps: list[TraceStep]
+
+
+class AuditReplayResponse(BaseModel):
+    run_id: str
+    trace: list[TraceStep]
+    audit: list[AuditRecord]
 
 
 class ApprovalRequest(BaseModel):

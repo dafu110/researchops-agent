@@ -17,12 +17,15 @@ quality checks into one auditable agent workspace.
 - **Multi-source ingestion** for text, PDFs, URLs, and GitHub repositories.
 - **Planner + tool agent flow** for calculations, SQL, sandboxed Python, reports,
   MCP calls, and knowledge stats.
+- **Structured planning details** with stage, risk, confidence, tool hints, and
+  approval requirements returned to the UI.
 - **Human-in-the-loop approval** for risky actions.
-- **Trace, task, and audit visibility** across agent runs and tool calls.
+- **Trace, task, and audit visibility** across agent runs and tool calls, with
+  task cancel/retry/recovery controls and filtered audit replay.
 - **Fixture-backed eval gate** for citations, safety behavior, retrieval, tools,
   observability, and missing-context handling.
 - **Local-first runtime** with JSON fallback, optional OpenAI Agents SDK, and
-  PostgreSQL + pgvector migration path.
+  PostgreSQL + pgvector as the Docker production path.
 
 ## Architecture
 
@@ -56,7 +59,7 @@ created -> planner -> tool_agent? -> rag_research -> awaiting_approval | complet
 Async work uses task records:
 
 ```text
-queued -> running -> completed | failed
+queued -> running -> completed | failed | canceled
 ```
 
 ## Quick Start
@@ -128,6 +131,16 @@ TASK_BACKEND=celery
 REDIS_URL=redis://redis:6379/0
 ```
 
+Docker Compose runs the API and worker with:
+
+```env
+STORE_BACKEND=postgres
+TASK_BACKEND=celery
+```
+
+Local development still defaults to `STORE_BACKEND=auto`, which uses PostgreSQL
+when reachable and falls back to the JSON store when it is not.
+
 Start worker:
 
 ```powershell
@@ -186,6 +199,15 @@ User management endpoints for admins:
 - `POST /api/users`
 - `DELETE /api/users/{user_id}`
 
+System and operations endpoints for admins/editors:
+
+- `GET /api/system/config`
+- `POST /api/system/tasks/recover`
+- `POST /api/tasks/{task_id}/cancel`
+- `POST /api/tasks/{task_id}/retry`
+- `GET /api/audit?risk_level=&status=&target=&run_id=`
+- `GET /api/audit/replay/{run_id}`
+
 ## Quality Gates
 
 ```powershell
@@ -225,7 +247,12 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 - `POST /api/ask`
 - `GET /api/runs/{run_id}/trace`
 - `GET /api/tasks`
+- `POST /api/tasks/{task_id}/cancel`
+- `POST /api/tasks/{task_id}/retry`
 - `GET /api/audit`
+- `GET /api/audit/replay/{run_id}`
+- `GET /api/system/config`
+- `POST /api/system/tasks/recover`
 - `GET /api/approvals`
 - `POST /api/approvals/{approval_id}/decision`
 - `GET /api/eval/summary`

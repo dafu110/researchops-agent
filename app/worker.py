@@ -16,7 +16,8 @@ celery_app = Celery("researchops_agent", broker=settings.redis_url, backend=sett
 def ingest_text_task(task_id: str, request: dict, user: dict) -> dict:
     context = _user_context(user)
     try:
-        task_service.start(task_id)
+        if not task_service.start(task_id):
+            return {}
         document, chunks = knowledge_store.ingest_text(
             title=str(request["title"]),
             text=str(request["text"]),
@@ -49,7 +50,8 @@ def ingest_url_task(task_id: str, request: dict, user: dict) -> dict:
 def ingest_github_repo_task(task_id: str, request: dict, user: dict) -> dict:
     context = _user_context(user)
     try:
-        task_service.start(task_id)
+        if not task_service.start(task_id):
+            return {}
         repo_name, text = extract_github_repo_text(str(request["url"]), str(request.get("ref", "main")))
         document, chunks = knowledge_store.ingest_text(
             title=f"GitHub Repo: {repo_name}",
@@ -68,7 +70,8 @@ def ingest_github_repo_task(task_id: str, request: dict, user: dict) -> dict:
 @celery_app.task(name="researchops.run_eval")
 def run_eval_task(task_id: str, user: dict) -> dict:
     try:
-        task_service.start(task_id)
+        if not task_service.start(task_id):
+            return {}
         result = asyncio.run(eval_service.run_golden(_user_context(user)))
         payload = result.model_dump()
         task_service.complete(task_id, payload)

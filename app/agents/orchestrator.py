@@ -1,7 +1,7 @@
 from uuid import uuid4
 
-from app.api.schemas import ApprovalRequest, AskRequest, AskResponse
-from app.agents.planner import PlannerAgent
+from app.api.schemas import ApprovalRequest, AskRequest, AskResponse, PlanStepDetail
+from app.agents.planner import PlanStep, PlannerAgent
 from app.agents.research import ResearchAgent
 from app.agents.tool_agent import ToolAgent
 from app.approvals.service import approval_service
@@ -28,6 +28,7 @@ class AgentOrchestrator:
         )
         with timed_step(run_id, "planner"):
             plan = await self.planner.plan(request.question)
+        plan_details = _plan_details(plan)
 
         approval_steps = [step for step in plan if step.needs_approval]
         if approval_steps:
@@ -49,6 +50,7 @@ class AgentOrchestrator:
                 requires_approval=True,
                 approval_id=approval.approval_id,
                 plan=[step.name for step in plan],
+                plan_details=plan_details,
             )
 
         tool_outputs: list[str] = []
@@ -90,4 +92,9 @@ class AgentOrchestrator:
             requires_approval=False,
             approval_id=None,
             plan=[step.name for step in plan],
+            plan_details=plan_details,
         )
+
+
+def _plan_details(plan: list[PlanStep]) -> list[PlanStepDetail]:
+    return [PlanStepDetail.model_validate(step.model_dump()) for step in plan]

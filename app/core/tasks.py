@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
@@ -21,6 +22,7 @@ class TaskService:
         title: str,
         tenant_id: str = "default",
         user_id: str = "local-dev",
+        payload: dict | None = None,
     ) -> TaskRecord:
         record = TaskRecord(
             task_id=str(uuid4()),
@@ -29,20 +31,97 @@ class TaskService:
             title=title,
             tenant_id=tenant_id,
             user_id=user_id,
+            payload=payload or {},
         )
         with self._lock:
             self._records[record.task_id] = record
             self._save()
         return record
 
-    def start(self, task_id: str) -> None:
-        self._update(task_id, status="running")
+    def start(self, task_id: str) -> bool:
+        with self._lock:
+            record = self._records.get(task_id)
+            if record is None:
+                return False
+            if record.cancel_requested or record.status == "canceled":
+                record.status = "canceled"
+                record.updated_at = _now()
+                self._save()
+                return False
+            record.status = "running"
+            record.attempts += 1
+            record.updated_at = _now()
+            self._save()
+            return True
 
     def complete(self, task_id: str, result: dict) -> None:
-        self._update(task_id, status="completed", result=result, error=None)
+        with self._lock:
+            record = self._records.get(task_id)
+            if record is None:
+                return
+            if record.cancel_requested:
+                record.status = "canceled"
+                record.error = "Task was canceled before completion."
+            else:
+                record.status = "completed"
+                record.result = result
+                record.error = None
+            record.updated_at = _now()
+            self._save()
 
     def fail(self, task_id: str, error: str) -> None:
         self._update(task_id, status="failed", error=error)
+
+    def cancel(self, task_id: str, tenant_id: str | None = None) -> TaskRecord | None:
+        with self._lock:
+            record = self._records.get(task_id)
+            if record is None or (tenant_id and record.tenant_id != tenant_id):
+                return None
+            if record.status in {"completed", "failed", "canceled"}:
+                return record
+            record.cancel_requested = True
+            if record.status == "queued":
+                record.status = "canceled"
+                record.error = "Task was canceled before it started."
+            else:
+                record.error = "Cancellation requested; worker will stop at the next checkpoint."
+            record.updated_at = _now()
+            self._save()
+            return record
+
+    def retry(self, task_id: str, tenant_id: str | None = None) -> TaskRecord | None:
+        with self._lock:
+            record = self._records.get(task_id)
+            if record is None or (tenant_id and record.tenant_id != tenant_id):
+                return None
+            if record.status not in {"failed", "canceled"}:
+                return record
+            if record.attempts >= record.max_attempts:
+                record.error = f"Retry limit reached ({record.max_attempts})."
+                record.updated_at = _now()
+                self._save()
+                return record
+            record.status = "queued"
+            record.cancel_requested = False
+            record.result = None
+            record.error = None
+            record.updated_at = _now()
+            self._save()
+            return record
+
+    def recover_stale_running(self, max_age_seconds: int = 3600) -> int:
+        cutoff = _now() - max_age_seconds
+        recovered = 0
+        with self._lock:
+            for record in self._records.values():
+                if record.status == "running" and record.updated_at < cutoff:
+                    record.status = "failed"
+                    record.error = "Recovered stale running task after worker interruption."
+                    record.updated_at = _now()
+                    recovered += 1
+            if recovered:
+                self._save()
+        return recovered
 
     def get(self, task_id: str, tenant_id: str | None = None) -> TaskRecord | None:
         with self._lock:
@@ -70,6 +149,7 @@ class TaskService:
             if record is None:
                 return
             record.status = status
+            record.updated_at = _now()
             if result is not None:
                 record.result = result
             if error is not None:
@@ -94,3 +174,7 @@ class TaskService:
 
 
 task_service = TaskService()
+
+
+def _now() -> int:
+    return int(time.time())

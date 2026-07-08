@@ -25,6 +25,8 @@ def test_ingest_and_answer_returns_citations() -> None:
     assert response.citations
     assert response.citations[0].source_id == document.document_id
     assert "ResearchOps Agent" in response.answer
+    assert response.plan_details
+    assert response.plan_details[0].stage == "intake"
 
 
 def test_high_risk_question_requires_approval() -> None:
@@ -34,6 +36,7 @@ def test_high_risk_question_requires_approval() -> None:
 
     assert response.requires_approval is True
     assert response.approval_id
+    assert any(step.needs_approval for step in response.plan_details)
 
 
 def test_private_url_fetch_is_rejected() -> None:

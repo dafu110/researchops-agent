@@ -10,6 +10,36 @@ from fastapi import Header, HTTPException
 from app.core.config import settings
 
 
+ROLE_PERMISSIONS: dict[str, list[str]] = {
+    "viewer": ["ask", "read_documents", "read_trace", "read_tasks", "read_audit"],
+    "editor": [
+        "ask",
+        "read_documents",
+        "read_trace",
+        "read_tasks",
+        "read_audit",
+        "ingest",
+        "run_eval",
+        "retry_task",
+        "cancel_task",
+    ],
+    "admin": [
+        "ask",
+        "read_documents",
+        "read_trace",
+        "read_tasks",
+        "read_audit",
+        "ingest",
+        "run_eval",
+        "retry_task",
+        "cancel_task",
+        "approve",
+        "manage_users",
+        "read_system_config",
+    ],
+}
+
+
 @dataclass
 class UserContext:
     user_id: str
@@ -24,6 +54,9 @@ class UserContext:
     @property
     def can_approve(self) -> bool:
         return self.role == "admin"
+
+    def has_permission(self, permission: str) -> bool:
+        return permission in ROLE_PERMISSIONS.get(self.role, [])
 
 
 class SessionService:

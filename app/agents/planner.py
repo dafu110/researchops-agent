@@ -3,7 +3,12 @@ from pydantic import BaseModel
 
 class PlanStep(BaseModel):
     name: str
+    stage: str
     goal: str
+    mode: str = "automatic"
+    tool_hint: str | None = None
+    risk_level: str = "low"
+    confidence: float = 1.0
     needs_tool: bool = False
     needs_approval: bool = False
 
@@ -11,6 +16,81 @@ class PlanStep(BaseModel):
 class PlannerAgent:
     async def plan(self, question: str) -> list[PlanStep]:
         lowered = question.lower()
+        risk_level = self._risk_level(lowered)
+        tool_hint = self._tool_hint(lowered)
+
+        plan = [
+            PlanStep(
+                name="intake",
+                stage="intake",
+                goal="Normalize the user request, identify evidence needs, and preserve tenant/source scope.",
+                confidence=0.92,
+            ),
+            PlanStep(
+                name="retrieve_evidence",
+                stage="retrieval",
+                goal=f"Collect grounded evidence for: {question}",
+                confidence=0.88,
+            ),
+        ]
+
+        if tool_hint:
+            plan.insert(
+                1,
+                PlanStep(
+                    name="tool_call",
+                    stage="execution",
+                    goal="Use the safest matching built-in tool before composing the final answer.",
+                    tool_hint=tool_hint,
+                    risk_level="high" if tool_hint == "mcp" else "medium",
+                    confidence=0.84,
+                    needs_tool=True,
+                ),
+            )
+
+        plan.append(
+            PlanStep(
+                name="compose_answer",
+                stage="response",
+                goal="Synthesize a grounded answer with citations and explicit uncertainty when evidence is incomplete.",
+                confidence=0.9,
+            )
+        )
+
+        if self._needs_report(lowered):
+            plan.append(
+                PlanStep(
+                    name="synthesize_report",
+                    stage="artifact",
+                    goal="Turn grounded evidence into a concise research report.",
+                    tool_hint="report",
+                    risk_level="medium",
+                    confidence=0.82,
+                )
+            )
+
+        if risk_level in {"high", "critical"}:
+            plan.append(
+                PlanStep(
+                    name="human_approval",
+                    stage="approval",
+                    goal="Request approval before executing a high-risk or destructive action.",
+                    mode="human_required",
+                    risk_level=risk_level,
+                    confidence=0.95,
+                    needs_approval=True,
+                )
+            )
+        return plan
+
+    def _risk_level(self, lowered: str) -> str:
+        critical_terms = (
+            "delete production",
+            "drop database",
+            "all production data",
+            "删除生产",
+            "清空",
+        )
         risky_terms = (
             "delete",
             "drop",
@@ -19,66 +99,32 @@ class PlannerAgent:
             "send email",
             "create pr",
             "remove",
-            "\u5220\u9664",
-            "\u5199\u5165",
-            "\u53d1\u9001",
-            "\u53d1\u90ae\u4ef6",
+            "write",
+            "删除",
+            "写入",
+            "发送",
+            "发邮件",
         )
-        needs_approval = any(term in lowered for term in risky_terms)
-        plan = [
-            PlanStep(
-                name="research",
-                goal=f"Collect grounded evidence for: {question}",
-            )
-        ]
-        if any(
-            term in lowered
-            for term in (
-                "calculate",
-                "\u8ba1\u7b97",
-                "eval",
-                "\u8bc4\u4f30",
-                "metric",
-                "document count",
-                "\u6587\u6863\u6570\u91cf",
-                "knowledge",
-                "\u77e5\u8bc6\u5e93",
-                "select ",
-                "```python",
-                "mcp",
-                "report",
-                "markdown",
-            )
-        ):
-            plan.insert(
-                0,
-                PlanStep(
-                    name="tool_call",
-                    goal="Use built-in tools for calculation, SQL, sandbox, MCP, or reports.",
-                    needs_tool=True,
-                ),
-            )
-        report_terms = (
-            "report",
-            "summary",
-            "analysis",
-            "\u62a5\u544a",
-            "\u603b\u7ed3",
-            "\u5206\u6790",
-        )
-        if any(term in lowered for term in report_terms):
-            plan.append(
-                PlanStep(
-                    name="synthesize_report",
-                    goal="Turn grounded evidence into a concise research report.",
-                )
-            )
-        if needs_approval:
-            plan.append(
-                PlanStep(
-                    name="human_approval",
-                    goal="Request approval before executing a high-risk action.",
-                    needs_approval=True,
-                )
-            )
-        return plan
+        if any(term in lowered for term in critical_terms):
+            return "critical"
+        if any(term in lowered for term in risky_terms):
+            return "high"
+        return "low"
+
+    def _tool_hint(self, lowered: str) -> str | None:
+        tool_terms = {
+            "calculator": ("calculate", "计算"),
+            "eval": ("eval", "评估", "metric", "document count", "文档数量"),
+            "knowledge": ("knowledge", "知识库", "documents", "chunks"),
+            "sql": ("select ", "sql"),
+            "sandbox": ("```python", "python"),
+            "mcp": ("mcp",),
+            "report": ("report", "markdown", "报告"),
+        }
+        for tool_name, terms in tool_terms.items():
+            if any(term in lowered for term in terms):
+                return tool_name
+        return None
+
+    def _needs_report(self, lowered: str) -> bool:
+        return any(term in lowered for term in ("report", "summary", "analysis", "报告", "总结", "分析"))

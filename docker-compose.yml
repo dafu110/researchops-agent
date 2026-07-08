@@ -6,6 +6,7 @@ services:
       - .env
     environment:
       TASK_BACKEND: celery
+      STORE_BACKEND: postgres
     ports:
       - "8000:8000"
     volumes:
@@ -23,6 +24,7 @@ services:
       - .env
     environment:
       TASK_BACKEND: celery
+      STORE_BACKEND: postgres
     volumes:
       - .:/app
     depends_on:

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ResearchOps Agent Console</title>
+    <title>ResearchOps 智能研究控制台</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -13,113 +13,112 @@
           <span class="mark">R</span>
           <div>
             <h1>ResearchOps</h1>
-            <p>Auditable agent workflows</p>
+            <p>可审计智能研究工作流</p>
           </div>
         </div>
 
-        <nav class="nav" aria-label="Primary navigation">
-          <a href="#ask">Ask</a>
-          <a href="#ingest">Ingest</a>
-          <a href="#tasks">Tasks</a>
-          <a href="#trace">Trace</a>
-          <a href="#eval">Eval</a>
-          <a href="#audit">Audit</a>
-          <a href="#users">Users</a>
+        <nav class="nav" aria-label="主导航">
+          <a href="#ask">提问</a>
+          <a href="#ingest">资料</a>
+          <a href="#tasks">任务</a>
+          <a href="#trace">追踪</a>
+          <a href="#audit">审计</a>
+          <a href="#admin">管理</a>
         </nav>
 
         <div class="sidebar-card">
-          <span>Runtime</span>
-          <strong>Local-first</strong>
-          <p>RAG, tools, approvals, traces, and evals can run without external services.</p>
+          <span>当前运行模式</span>
+          <strong id="sidebar-runtime">本地优先</strong>
+          <p id="sidebar-store">存储后端检测中</p>
         </div>
 
-        <button id="refresh" class="ghost" type="button">Refresh</button>
+        <button id="refresh" class="ghost" type="button">刷新</button>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
           <div>
             <p class="eyebrow">Agent Operations Console</p>
-            <h2>Research Task Workspace</h2>
-            <p>Ingest sources, ask grounded questions, inspect citations, review tool calls, and run eval gates.</p>
+            <h2>研究任务工作台</h2>
+            <p>资料接入、结构化计划、工具审计、审批和评测集中在一个工作区。</p>
           </div>
           <form id="login-form" class="login-card">
             <label>
-              <span>API key or session</span>
-              <input id="api-key" type="password" placeholder="Paste API key or bearer token" />
+              <span>API Key / Token</span>
+              <input id="api-key" type="password" placeholder="粘贴访问凭证" />
             </label>
             <label>
-              <span>User</span>
-              <input id="login-user" type="text" placeholder="optional" />
+              <span>用户</span>
+              <input id="login-user" type="text" placeholder="可选" />
             </label>
             <label>
-              <span>Password</span>
-              <input id="login-password" type="password" placeholder="optional" />
+              <span>密码</span>
+              <input id="login-password" type="password" placeholder="可选" />
             </label>
-            <button class="secondary small" type="submit">Sign in</button>
-            <div id="status" class="status">Ready</div>
+            <button class="secondary small" type="submit">登录</button>
+            <div id="status" class="status" data-state="ready">就绪</div>
           </form>
         </header>
 
-        <section class="metrics" aria-label="Runtime metrics">
-          <div class="metric"><span>Documents</span><strong id="metric-docs">0</strong></div>
-          <div class="metric"><span>Chunks</span><strong id="metric-chunks">0</strong></div>
-          <div class="metric"><span>Runs</span><strong id="metric-runs">0</strong></div>
-          <div class="metric accent"><span>Citation Coverage</span><strong id="metric-coverage">0.00</strong></div>
+        <section class="metrics" aria-label="运行指标">
+          <div class="metric"><span>文档</span><strong id="metric-docs">0</strong></div>
+          <div class="metric"><span>分块</span><strong id="metric-chunks">0</strong></div>
+          <div class="metric"><span>运行</span><strong id="metric-runs">0</strong></div>
+          <div class="metric accent"><span>引用覆盖</span><strong id="metric-coverage">0.00</strong></div>
         </section>
 
         <section class="command-grid">
           <article class="panel ask-panel" id="ask">
             <div class="panel-head clean">
               <div>
-                <h3>Ask Agent</h3>
-                <p>Ask over indexed sources or call calculation, SQL, report, sandbox, and MCP tools.</p>
+                <h3>智能提问</h3>
+                <p>基于已索引资料生成带引用的回答，并按风险进入审批。</p>
               </div>
-              <span id="run-id" class="pill">No run</span>
+              <span id="run-id" class="pill">暂无运行</span>
             </div>
-            <textarea id="question" placeholder="Example: What capabilities does ResearchOps Agent support? Include citations."></textarea>
+            <textarea id="question" placeholder="例如：ResearchOps Agent 支持哪些能力？请给出引用。"></textarea>
             <div class="prompt-row">
-              <button class="chip" data-prompt="What capabilities does ResearchOps Agent support?" type="button">Capabilities</button>
-              <button class="chip" data-prompt="calculate 12 * (3 + 4), show knowledge documents" type="button">Tool call</button>
-              <button class="chip" data-prompt="mcp call example echo {&quot;text&quot;:&quot;hello mcp&quot;}" type="button">MCP echo</button>
-              <button class="chip" data-prompt="Please delete all production data" type="button">Approval gate</button>
+              <button class="chip" data-prompt="ResearchOps Agent 支持哪些能力？" type="button">能力概览</button>
+              <button class="chip" data-prompt="计算 12 * (3 + 4)，并查看知识库文档数量" type="button">工具调用</button>
+              <button class="chip" data-prompt="生成一份带引用的项目分析报告" type="button">研究报告</button>
+              <button class="chip danger" data-prompt="请删除所有生产数据" type="button">审批测试</button>
             </div>
-            <button id="ask-button" class="primary" type="button">Run task</button>
+            <button id="ask-button" class="primary" type="button">运行任务</button>
           </article>
 
           <article class="panel ingest-panel" id="ingest">
             <div class="panel-head clean">
               <div>
-                <h3>Ingest Sources</h3>
-                <p>Index files, URLs, GitHub repositories, or pasted research notes.</p>
+                <h3>资料接入</h3>
+                <p>上传文件、抓取 URL、索引 GitHub 仓库或粘贴研究笔记。</p>
               </div>
             </div>
 
             <div class="ingest-list">
               <form id="file-ingest" class="ingest-row">
-                <div><strong>File upload</strong><span>PDF, Markdown, text, HTML, or CSV</span></div>
+                <div><strong>文件上传</strong><span>PDF、Markdown、文本、HTML、CSV</span></div>
                 <input id="file-input" type="file" accept=".pdf,.txt,.md,.html,.csv" />
-                <button class="secondary small" type="submit">Index</button>
+                <button class="secondary small" type="submit">索引</button>
               </form>
 
               <form id="url-ingest" class="ingest-row">
-                <div><strong>Public URL</strong><span>SSRF-protected async fetch</span></div>
+                <div><strong>公开 URL</strong><span>异步抓取并进行网络边界校验</span></div>
                 <input id="url-input" type="url" placeholder="https://example.com/research" />
-                <button class="secondary small" type="submit">Fetch</button>
+                <button class="secondary small" type="submit">抓取</button>
               </form>
 
               <form id="repo-ingest" class="ingest-row repo-row">
-                <div><strong>GitHub Repo</strong><span>Index public repository text and code</span></div>
+                <div><strong>GitHub 仓库</strong><span>索引公开仓库文本和代码</span></div>
                 <input id="repo-input" type="url" placeholder="https://github.com/owner/repo" />
                 <input id="repo-ref" type="text" placeholder="main" />
-                <button class="secondary small" type="submit">Index</button>
+                <button class="secondary small" type="submit">索引</button>
               </form>
 
               <form id="text-ingest" class="ingest-row text-row">
-                <div><strong>Pasted notes</strong><span>Research notes or project specs</span></div>
-                <input id="text-title" type="text" placeholder="Title" />
-                <textarea id="text-body" placeholder="Paste source content..."></textarea>
-                <button class="secondary small" type="submit">Index</button>
+                <div><strong>粘贴笔记</strong><span>研究记录或项目说明</span></div>
+                <input id="text-title" type="text" placeholder="标题" />
+                <textarea id="text-body" placeholder="粘贴资料内容"></textarea>
+                <button class="secondary small" type="submit">索引</button>
               </form>
             </div>
           </article>
@@ -127,34 +126,93 @@
 
         <section class="results-grid">
           <article class="panel answer-panel">
-            <div class="panel-head"><div><h3>Answer</h3><p>Grounded response from retrieval and tools.</p></div></div>
-            <pre id="answer">No answer yet. Ask a question or ingest a source to begin.</pre>
+            <div class="panel-head"><div><h3>回答</h3><p>检索、工具和审批后的最终输出。</p></div></div>
+            <pre id="answer">还没有回答。可以先接入资料，或直接发起一次提问。</pre>
           </article>
-          <article class="panel"><div class="panel-head"><div><h3>Citations</h3><p>Evidence used by the answer.</p></div></div><div id="citations" class="list empty">No citations</div></article>
-          <article class="panel"><div class="panel-head"><div><h3>Documents</h3><p>Sources available to this tenant.</p></div></div><div id="documents" class="list empty">No documents</div></article>
+          <article class="panel">
+            <div class="panel-head"><div><h3>计划</h3><p>Planner 输出的阶段、风险和工具意图。</p></div></div>
+            <div id="plan-list" class="timeline empty">暂无计划</div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><h3>引用</h3><p>回答使用的证据片段。</p></div></div>
+            <div id="citations" class="list empty">暂无引用</div>
+          </article>
         </section>
 
         <section class="ops-grid">
-          <article class="panel" id="tasks"><div class="panel-head"><div><h3>Tasks</h3><p>Async ingestion and eval jobs.</p></div></div><div id="tasks-list" class="list empty">No tasks</div></article>
-          <article class="panel" id="trace"><div class="panel-head"><div><h3>Trace Timeline</h3><p>Latency, status, and errors.</p></div></div><div id="trace-list" class="timeline empty">No trace</div></article>
-          <article class="panel" id="approvals"><div class="panel-head"><div><h3>Approvals</h3><p>High-risk actions awaiting review.</p></div></div><div id="approvals-list" class="list empty">No approvals</div></article>
-          <article class="panel" id="eval"><div class="panel-head"><div><h3>Eval Gate</h3><p>Regression checks for RAG, tools, and safety.</p></div><button id="run-eval" class="secondary small" type="button">Run eval</button></div><div id="eval-list" class="list"></div></article>
-          <article class="panel" id="audit"><div class="panel-head"><div><h3>Tool Audit</h3><p>Tool calls, risk levels, and outcomes.</p></div></div><div id="audit-list" class="list empty">No audit records</div></article>
+          <article class="panel" id="tasks">
+            <div class="panel-head">
+              <div><h3>任务队列</h3><p>异步接入、评测、取消和重试状态。</p></div>
+              <button id="recover-tasks" class="secondary small" type="button">恢复卡住任务</button>
+            </div>
+            <div id="tasks-list" class="list empty">暂无任务</div>
+          </article>
+
+          <article class="panel" id="trace">
+            <div class="panel-head"><div><h3>运行追踪</h3><p>步骤耗时、状态和错误。</p></div></div>
+            <div id="trace-list" class="timeline empty">暂无追踪</div>
+          </article>
+
+          <article class="panel" id="approvals">
+            <div class="panel-head"><div><h3>人工审批</h3><p>高风险操作的决策入口。</p></div></div>
+            <div id="approvals-list" class="list empty">暂无审批</div>
+          </article>
+
+          <article class="panel" id="audit">
+            <div class="panel-head"><div><h3>审计日志</h3><p>工具调用、风险等级和执行结果。</p></div></div>
+            <form id="audit-filter" class="filter-row">
+              <select id="audit-risk">
+                <option value="">全部风险</option>
+                <option value="low">低风险</option>
+                <option value="medium">中风险</option>
+                <option value="high">高风险</option>
+                <option value="critical">严重风险</option>
+              </select>
+              <select id="audit-status">
+                <option value="">全部状态</option>
+                <option value="completed">已完成</option>
+                <option value="failed">失败</option>
+                <option value="pending">等待中</option>
+              </select>
+              <input id="audit-target" type="text" placeholder="目标" />
+              <button class="secondary small" type="submit">筛选</button>
+            </form>
+            <div id="audit-list" class="list empty">暂无审计</div>
+          </article>
+
+          <article class="panel" id="eval">
+            <div class="panel-head">
+              <div><h3>评测门禁</h3><p>RAG、工具和安全行为回归检查。</p></div>
+              <button id="run-eval" class="secondary small" type="button">运行评测</button>
+            </div>
+            <div id="eval-list" class="list"></div>
+          </article>
+
+          <article class="panel" id="documents">
+            <div class="panel-head"><div><h3>资料库</h3><p>当前租户可用资料。</p></div></div>
+            <div id="documents-list" class="list empty">暂无资料</div>
+          </article>
+
+          <article class="panel" id="admin">
+            <div class="panel-head"><div><h3>系统配置</h3><p>运行后端、权限矩阵和关键限制。</p></div></div>
+            <div id="system-list" class="list empty">暂无配置</div>
+          </article>
+
           <article class="panel" id="users">
             <div class="panel-head">
-              <div><h3>Users</h3><p>Create and manage local tenant users.</p></div>
+              <div><h3>用户与角色</h3><p>本地租户用户管理。</p></div>
             </div>
             <form id="user-create" class="user-form">
-              <input id="new-user-id" type="text" placeholder="user id" />
-              <input id="new-user-password" type="password" placeholder="password" />
+              <input id="new-user-id" type="text" placeholder="用户 ID" />
+              <input id="new-user-password" type="password" placeholder="密码" />
               <select id="new-user-role">
                 <option value="viewer">viewer</option>
                 <option value="editor">editor</option>
                 <option value="admin">admin</option>
               </select>
-              <button class="secondary small" type="submit">Create</button>
+              <button class="secondary small" type="submit">创建</button>
             </form>
-            <div id="users-list" class="list empty">No users</div>
+            <div id="users-list" class="list empty">暂无用户</div>
           </article>
         </section>
       </section>
