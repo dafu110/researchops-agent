@@ -12,3 +12,5 @@ data/*.json
 data/uploads/
 data/tools.db
 data/reports/
+data/sessions.json
+data/users.json

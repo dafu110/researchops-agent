@@ -51,6 +51,8 @@ class MCPRegistry:
         server = next((item for item in self.list_servers() if item.name == server_name), None)
         if server is None:
             return f"mcp_error: server '{server_name}' is not configured"
+        if not self._tool_allowed(server_name, tool_name):
+            return f"mcp_error: tool '{tool_name}' is not allowed for server '{server_name}'"
         if server.url:
             return self._call_http(server, tool_name, arguments)
         if server.command:
@@ -100,6 +102,18 @@ class MCPRegistry:
 
     def _notification(self, method: str, params: dict) -> dict:
         return {"jsonrpc": "2.0", "method": method, "params": params}
+
+    def _tool_allowed(self, server_name: str, tool_name: str) -> bool:
+        try:
+            payload = json.loads(settings.mcp_allowed_tools_json)
+        except json.JSONDecodeError:
+            return False
+        if not payload:
+            return True
+        allowed = payload.get(server_name, [])
+        if "*" in allowed:
+            return True
+        return tool_name in allowed
 
 
 mcp_registry = MCPRegistry()

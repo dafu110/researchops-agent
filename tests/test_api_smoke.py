@@ -7,13 +7,13 @@ from app.rag.github_repo import parse_github_repo_url
 client = TestClient(app)
 
 
-def test_chinese_dashboard_smoke() -> None:
+def test_dashboard_smoke() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "资料导入" in response.text
-    assert "任务队列" in response.text
-    assert "工具审计" in response.text
+    assert "Research Task Workspace" in response.text
+    assert "Ingest Sources" in response.text
+    assert "Tool Audit" in response.text
 
 
 def test_async_text_ingest_and_task_queue() -> None:

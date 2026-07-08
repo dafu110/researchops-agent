@@ -29,6 +29,17 @@ def handle_tool_call(params):
                 }
             ]
         }
+    if name == "search_fixture":
+        query = str(arguments.get("query", "")).lower()
+        corpus = [
+            "ResearchOps supports RAG citations and trace timelines.",
+            "Tool execution includes SQL, sandbox, reports, and MCP.",
+            "Approval gates protect high-risk agent actions.",
+        ]
+        matches = [item for item in corpus if query in item.lower()]
+        return {"content": [{"type": "text", "text": "\n".join(matches) or "no matches"}]}
+    if name == "status":
+        return {"content": [{"type": "text", "text": "example-mcp healthy"}]}
     return {"isError": True, "content": [{"type": "text", "text": f"unknown tool: {name}"}]}
 
 
@@ -65,6 +76,8 @@ def main() -> None:
                             "tools": [
                                 {"name": "echo", "description": "Echo text."},
                                 {"name": "add", "description": "Add two numbers."},
+                                {"name": "search_fixture", "description": "Search fixture text."},
+                                {"name": "status", "description": "Return server health."},
                             ]
                         },
                     )

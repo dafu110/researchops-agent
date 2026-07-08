@@ -32,6 +32,42 @@ class AskRequest(BaseModel):
     max_cost_usd: float | None = None
 
 
+class AuthLoginRequest(BaseModel):
+    api_key: str | None = None
+    user_id: str | None = None
+    password: str | None = None
+
+
+class AuthSessionResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    tenant_id: str
+    role: str
+
+
+class UserProfile(BaseModel):
+    user_id: str
+    tenant_id: str
+    role: str
+    allowed_sources: list[str] = Field(default_factory=list)
+
+
+class UserCreateRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    password: str = Field(min_length=6)
+    tenant_id: str = "default"
+    role: str = "viewer"
+    allowed_sources: list[str] = Field(default_factory=list)
+
+
+class UserRecord(BaseModel):
+    user_id: str
+    tenant_id: str = "default"
+    role: str = "viewer"
+    allowed_sources: list[str] = Field(default_factory=list)
+
+
 class Citation(BaseModel):
     source_id: str
     title: str

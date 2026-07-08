@@ -6,6 +6,8 @@ from app.api.schemas import (
     AskRequest,
     AskResponse,
     AuditRecord,
+    AuthLoginRequest,
+    AuthSessionResponse,
     DocumentSummary,
     EvalSummary,
     EvalRunResponse,
@@ -16,15 +18,27 @@ from app.api.schemas import (
     RunTraceResponse,
     TaskCreateResponse,
     TaskRecord,
+    UserCreateRequest,
+    UserProfile,
+    UserRecord,
 )
 from app.agents.orchestrator import AgentOrchestrator
 from app.approvals.service import approval_service
 from app.core.config import settings
 from app.core.audit import audit_service
 from app.core.network import URLFetchError, fetch_public_url
-from app.core.security import UserContext, current_user, require_approval, require_ingest
+from app.core.security import (
+    UserContext,
+    authenticate_api_key,
+    authenticate_password,
+    current_user,
+    require_approval,
+    require_ingest,
+    session_service,
+)
 from app.core.tasks import task_service
 from app.core.traces import trace_store
+from app.core.users import user_service
 from app.evals.service import eval_service
 from app.rag.extractors import extract_text_from_bytes
 from app.rag.github_repo import extract_github_repo_text
@@ -32,6 +46,61 @@ from app.rag.store import knowledge_store
 
 router = APIRouter()
 orchestrator = AgentOrchestrator()
+
+
+@router.post("/auth/login", response_model=AuthSessionResponse)
+async def login(request: AuthLoginRequest) -> AuthSessionResponse:
+    user = authenticate_api_key(request.api_key) or authenticate_password(
+        request.user_id,
+        request.password,
+    )
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+    token = session_service.create(user)
+    return AuthSessionResponse(
+        access_token=token,
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        role=user.role,
+    )
+
+
+@router.get("/auth/me", response_model=UserProfile)
+async def me(user: UserContext = Depends(current_user)) -> UserProfile:
+    return UserProfile(
+        user_id=user.user_id,
+        tenant_id=user.tenant_id,
+        role=user.role,
+        allowed_sources=user.allowed_sources,
+    )
+
+
+@router.get("/users", response_model=list[UserRecord])
+async def list_users(user: UserContext = Depends(current_user)) -> list[UserRecord]:
+    require_approval(user)
+    return user_service.list_records(user.tenant_id)
+
+
+@router.post("/users", response_model=UserRecord)
+async def create_user(
+    request: UserCreateRequest,
+    user: UserContext = Depends(current_user),
+) -> UserRecord:
+    require_approval(user)
+    request.tenant_id = user.tenant_id
+    try:
+        return user_service.create(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/users/{user_id}", response_model=dict)
+async def delete_user(user_id: str, user: UserContext = Depends(current_user)) -> dict:
+    require_approval(user)
+    deleted = user_service.delete(user_id, user.tenant_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"deleted": True}
 
 
 @router.post("/ask", response_model=AskResponse)

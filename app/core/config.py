@@ -17,9 +17,12 @@ class Settings(BaseSettings):
     agent_runtime: str = "auto"
     openai_agent_model: str = "gpt-5-nano"
     mcp_servers_json: str = "[]"
+    mcp_allowed_tools_json: str = "{}"
     mcp_timeout_seconds: int = 8
     api_keys_json: str = "[]"
+    local_users_json: str = "[]"
     auth_required: bool = False
+    session_ttl_seconds: int = 28_800
     default_tenant_id: str = "default"
     sandbox_mode: str = "process"
     sandbox_docker_image: str = "python:3.12-slim"

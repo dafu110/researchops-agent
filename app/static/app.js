@@ -1,44 +1,24 @@
 let lastRunId = null;
 
 const $ = (selector) => document.querySelector(selector);
+const tokenKey = "researchops-token";
+const apiKeyKey = "researchops-api-key";
 
 const labels = {
-  status: {
-    Ready: "就绪",
-    Running: "运行中",
-    Evaluating: "评测中",
-    Error: "出错",
-  },
   step: {
-    planner: "任务规划",
-    human_approval_requested: "请求人工审批",
-    tool_agent: "工具调用",
-    rag_research: "检索与回答",
-    final_response: "生成最终回答",
+    planner: "Planner",
+    human_approval_requested: "Approval requested",
+    tool_agent: "Tool agent",
+    rag_research: "RAG research",
+    final_response: "Final response",
   },
-  state: {
-    completed: "已完成",
-    failed: "失败",
-    pending: "待审批",
-    approved: "已批准",
-    rejected: "已拒绝",
-  },
-  risk: {
-    high: "高风险",
-    medium: "中风险",
-    low: "低风险",
-  },
-  task: {
-    queued: "排队中",
-    running: "运行中",
-    completed: "已完成",
-    failed: "失败",
-  },
+  state: { completed: "Completed", failed: "Failed", pending: "Pending", approved: "Approved", rejected: "Rejected" },
+  task: { queued: "Queued", running: "Running", completed: "Completed", failed: "Failed" },
   kind: {
-    ingest_github_repo: "GitHub 仓库索引",
-    ingest_text: "文本索引",
-    ingest_url: "网页抓取",
-    eval_run: "评测运行",
+    ingest_github_repo: "GitHub ingest",
+    ingest_text: "Text ingest",
+    ingest_url: "URL ingest",
+    eval_run: "Eval run",
   },
 };
 
@@ -53,17 +33,19 @@ const escapeHtml = (value) =>
 
 const localize = (group, value) => labels[group][value] || value || "-";
 
-const getJson = async (url, options) => {
-  const apiKey = localStorage.getItem("researchops-api-key") || "";
-  const headers = new Headers(options?.headers || {});
-  if (apiKey) headers.set("X-API-Key", apiKey);
+async function getJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const token = localStorage.getItem(tokenKey) || "";
+  const apiKey = localStorage.getItem(apiKeyKey) || "";
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (!token && apiKey) headers.set("X-API-Key", apiKey);
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) throw new Error(await response.text());
   return response.json();
-};
+}
 
 const setStatus = (text) => {
-  $("#status").textContent = labels.status[text] || text;
+  $("#status").textContent = text;
   $("#status").dataset.state = text.toLowerCase();
 };
 
@@ -85,30 +67,25 @@ async function refresh() {
       getJson("/api/tasks"),
       getJson("/api/audit"),
     ]);
+    let users = [];
+    try {
+      users = await getJson("/api/users");
+    } catch {
+      users = [];
+    }
 
     $("#metric-docs").textContent = summary.document_count;
     $("#metric-chunks").textContent = summary.chunk_count;
     $("#metric-runs").textContent = summary.run_count;
     $("#metric-coverage").textContent = Number(summary.citation_coverage).toFixed(2);
-
     $("#documents").innerHTML = docs.length
-      ? docs.map((doc) => item(doc.title, `${doc.source} · ${doc.chunk_count} 个分块 · ${doc.status}`)).join("")
-      : "暂无文档";
-
-    $("#approvals-list").innerHTML = approvals.length
-      ? approvals.map(renderApproval).join("")
-      : "暂无审批项";
-
-    $("#tasks-list").innerHTML = tasks.length
-      ? tasks.map(renderTask).join("")
-      : "暂无任务";
-
-    $("#audit-list").innerHTML = audit.length
-      ? audit.map(renderAudit).join("")
-      : "暂无审计记录";
-
+      ? docs.map((doc) => item(doc.title, `${doc.source} | ${doc.chunk_count} chunks | ${doc.status}`)).join("")
+      : "No documents";
+    $("#approvals-list").innerHTML = approvals.length ? approvals.map(renderApproval).join("") : "No approvals";
+    $("#tasks-list").innerHTML = tasks.length ? tasks.map(renderTask).join("") : "No tasks";
+    $("#audit-list").innerHTML = audit.length ? audit.map(renderAudit).join("") : "No audit records";
+    $("#users-list").innerHTML = users.length ? users.map(renderUser).join("") : "No users";
     $("#eval-list").innerHTML = renderEvalSummary(summary);
-
     if (lastRunId) await refreshTrace();
     setStatus("Ready");
   } catch (error) {
@@ -119,72 +96,59 @@ async function refresh() {
 
 async function refreshTrace() {
   const trace = await getJson(`/api/runs/${lastRunId}/trace`);
-  $("#trace-list").innerHTML = trace.steps.length
-    ? trace.steps.map(renderTraceStep).join("")
-    : "暂无轨迹";
+  $("#trace-list").innerHTML = trace.steps.length ? trace.steps.map(renderTraceStep).join("") : "No trace";
 }
 
 function renderTraceStep(step) {
-  const status = localize("state", step.status);
-  const name = localize("step", step.name);
   const error = step.error ? `<div class="muted">${escapeHtml(step.error)}</div>` : "";
-  return `
-    <div class="step" data-state="${escapeHtml(step.status)}">
-      <strong>${escapeHtml(name)}</strong>
-      <div>${escapeHtml(status)} · ${step.latency_ms ?? 0}ms</div>
-      ${error}
-    </div>`;
+  return `<div class="step" data-state="${escapeHtml(step.status)}">
+    <strong>${escapeHtml(localize("step", step.name))}</strong>
+    <div>${escapeHtml(localize("state", step.status))} | ${step.latency_ms ?? 0}ms</div>${error}</div>`;
 }
 
 function renderApproval(row) {
   const buttons = row.status === "pending"
-    ? `<div class="actions">
-        <button class="small" data-approve="${row.approval_id}">批准</button>
-        <button class="small secondary" data-reject="${row.approval_id}">拒绝</button>
-      </div>`
+    ? `<div class="actions"><button class="small" data-approve="${row.approval_id}">Approve</button>
+       <button class="small secondary" data-reject="${row.approval_id}">Reject</button></div>`
     : "";
-  const status = localize("state", row.status);
-  const risk = localize("risk", row.risk_level);
-  return item(`${status} · ${risk}`, row.action, buttons);
+  return item(`${localize("state", row.status)} | ${row.risk_level}`, row.action, buttons);
 }
 
 function renderTask(row) {
-  const status = localize("task", row.status);
-  const kind = localize("kind", row.kind);
-  const result = row.result?.chunks_indexed != null ? ` · ${row.result.chunks_indexed} 个分块` : "";
-  const error = row.error ? ` · ${row.error}` : "";
-  return item(`${status} · ${kind}`, `${row.title}${result}${error}`);
+  const chunks = row.result?.chunks_indexed != null ? ` | ${row.result.chunks_indexed} chunks` : "";
+  const error = row.error ? ` | ${row.error}` : "";
+  return item(`${localize("task", row.status)} | ${localize("kind", row.kind)}`, `${row.title}${chunks}${error}`);
 }
 
 function renderAudit(row) {
-  const risk = localize("risk", row.risk_level);
-  const status = localize("state", row.status);
-  return item(`${risk} · ${row.target}`, `${status} · ${row.detail || row.action}`);
+  return item(`${row.risk_level} | ${row.target}`, `${localize("state", row.status)} | ${row.detail || row.action}`);
+}
+
+function renderUser(row) {
+  return item(
+    `${row.user_id} | ${row.role}`,
+    `tenant=${row.tenant_id} | sources=${row.allowed_sources.join(", ") || "*"}`,
+    `<div class="actions"><button class="small secondary" data-delete-user="${row.user_id}">Delete</button></div>`
+  );
 }
 
 function renderEvalSummary(summary) {
   const coverage = Math.max(0, Math.min(1, Number(summary.citation_coverage || 0)));
-  return `
-    <div class="item metric-item">
-      <strong>引用覆盖率</strong>
-      <div>${coverage.toFixed(2)}</div>
-      <div class="bar"><span style="width:${coverage * 100}%"></span></div>
-    </div>`;
+  return `<div class="item metric-item"><strong>Citation coverage</strong><div>${coverage.toFixed(2)}</div>
+    <div class="bar"><span style="width:${coverage * 100}%"></span></div></div>`;
 }
 
 function renderEvalResult(result) {
-  const body = result.passed
-    ? "通过"
-    : `未通过 · 缺失关键词：${result.missing_terms.join("、") || "无"}`;
+  const body = result.passed ? "Passed" : `Missing: ${result.missing_terms.join(", ") || "none"}`;
   return item(result.case_id, body);
 }
 
 function formatError(error) {
   try {
     const parsed = JSON.parse(String(error.message || error));
-    return parsed.detail ? `请求失败：${parsed.detail}` : `请求失败：${JSON.stringify(parsed)}`;
+    return parsed.detail ? `Request failed: ${parsed.detail}` : `Request failed: ${JSON.stringify(parsed)}`;
   } catch {
-    return `请求失败：${String(error.message || error)}`;
+    return `Request failed: ${String(error.message || error)}`;
   }
 }
 
@@ -196,6 +160,27 @@ async function decideApproval(approvalId, approved) {
   });
   await refresh();
 }
+
+$("#login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const apiKey = $("#api-key").value.trim();
+  const userId = $("#login-user").value.trim();
+  const password = $("#login-password").value;
+  localStorage.setItem(apiKeyKey, apiKey);
+  if (!userId && !password) {
+    setStatus("Ready");
+    await refresh();
+    return;
+  }
+  const response = await getJson("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey || null, user_id: userId || null, password: password || null }),
+  });
+  localStorage.setItem(tokenKey, response.access_token);
+  setStatus(`Signed in as ${response.user_id}`);
+  await refresh();
+});
 
 $("#ask-button").addEventListener("click", async () => {
   const question = $("#question").value.trim();
@@ -209,11 +194,11 @@ $("#ask-button").addEventListener("click", async () => {
       body: JSON.stringify({ question, corpus_ids: [] }),
     });
     lastRunId = response.run_id;
-    $("#run-id").textContent = `运行 ${response.run_id.slice(0, 8)}`;
+    $("#run-id").textContent = `Run ${response.run_id.slice(0, 8)}`;
     $("#answer").textContent = response.answer;
     $("#citations").innerHTML = response.citations.length
-      ? response.citations.map((citation) => item(`${citation.title} · ${citation.locator}`, citation.excerpt)).join("")
-      : "暂无引用";
+      ? response.citations.map((citation) => item(`${citation.title} | ${citation.locator}`, citation.excerpt)).join("")
+      : "No citations";
     await refresh();
   } catch (error) {
     setStatus("Error");
@@ -228,16 +213,14 @@ $("#file-ingest").addEventListener("submit", async (event) => {
   const file = $("#file-input").files[0];
   if (!file) return;
   setBusy(true);
-  setStatus("Running");
   try {
     const body = new FormData();
     body.append("file", file);
     const response = await getJson("/api/ingest", { method: "POST", body });
-    $("#answer").textContent = `文件已索引：${response.source}，生成 ${response.chunks_indexed} 个分块。`;
+    $("#answer").textContent = `Indexed ${response.source} with ${response.chunks_indexed} chunks.`;
     $("#file-input").value = "";
     await refresh();
   } catch (error) {
-    setStatus("Error");
     $("#answer").textContent = formatError(error);
   } finally {
     setBusy(false);
@@ -248,23 +231,10 @@ $("#url-ingest").addEventListener("submit", async (event) => {
   event.preventDefault();
   const url = $("#url-input").value.trim();
   if (!url) return;
-  setBusy(true);
-  setStatus("Running");
-  try {
-    const response = await getJson("/api/ingest/url/async", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
-    $("#answer").textContent = `网页抓取任务已创建：${response.task_id.slice(0, 8)}。`;
-    $("#url-input").value = "";
-    await refresh();
-  } catch (error) {
-    setStatus("Error");
-    $("#answer").textContent = formatError(error);
-  } finally {
-    setBusy(false);
-  }
+  const response = await createJsonTask("/api/ingest/url/async", { url });
+  $("#answer").textContent = `URL ingest task created: ${response.task_id.slice(0, 8)}.`;
+  $("#url-input").value = "";
+  await refresh();
 });
 
 $("#repo-ingest").addEventListener("submit", async (event) => {
@@ -272,24 +242,11 @@ $("#repo-ingest").addEventListener("submit", async (event) => {
   const url = $("#repo-input").value.trim();
   const ref = $("#repo-ref").value.trim() || "main";
   if (!url) return;
-  setBusy(true);
-  setStatus("Running");
-  try {
-    const response = await getJson("/api/ingest/github/async", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, ref }),
-    });
-    $("#answer").textContent = `GitHub 仓库索引任务已创建：${response.task_id.slice(0, 8)}。`;
-    $("#repo-input").value = "";
-    $("#repo-ref").value = "";
-    await refresh();
-  } catch (error) {
-    setStatus("Error");
-    $("#answer").textContent = formatError(error);
-  } finally {
-    setBusy(false);
-  }
+  const response = await createJsonTask("/api/ingest/github/async", { url, ref });
+  $("#answer").textContent = `GitHub ingest task created: ${response.task_id.slice(0, 8)}.`;
+  $("#repo-input").value = "";
+  $("#repo-ref").value = "";
+  await refresh();
 });
 
 $("#text-ingest").addEventListener("submit", async (event) => {
@@ -297,63 +254,85 @@ $("#text-ingest").addEventListener("submit", async (event) => {
   const title = $("#text-title").value.trim();
   const text = $("#text-body").value.trim();
   if (!title || !text) return;
+  const response = await createJsonTask("/api/ingest/text/async", { title, text, source: "manual" });
+  $("#answer").textContent = `Text ingest task created: ${response.task_id.slice(0, 8)}.`;
+  $("#text-title").value = "";
+  $("#text-body").value = "";
+  await refresh();
+});
+
+async function createJsonTask(url, payload) {
   setBusy(true);
   setStatus("Running");
   try {
-    const response = await getJson("/api/ingest/text/async", {
+    return await getJson(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, text, source: "manual" }),
+      body: JSON.stringify(payload),
     });
-    $("#answer").textContent = `文本索引任务已创建：${response.task_id.slice(0, 8)}。`;
-    $("#text-title").value = "";
-    $("#text-body").value = "";
-    await refresh();
-  } catch (error) {
-    setStatus("Error");
-    $("#answer").textContent = formatError(error);
   } finally {
     setBusy(false);
   }
-});
+}
 
 $("#run-eval").addEventListener("click", async () => {
   setBusy(true);
   setStatus("Evaluating");
   try {
-    const response = await getJson("/api/eval/run/async", { method: "POST" });
-    $("#eval-list").innerHTML = item("评测任务已创建", `任务 ${response.task_id.slice(0, 8)} 正在后台运行。`);
-    await refresh();
+    const response = await getJson("/api/eval/run", { method: "POST" });
+    $("#eval-list").innerHTML =
+      `<div class="item"><strong>Pass rate</strong><div>${response.pass_rate.toFixed(2)}</div>
+      <div class="bar"><span style="width:${response.pass_rate * 100}%"></span></div></div>` +
+      response.results.map(renderEvalResult).join("");
     setStatus("Ready");
   } catch (error) {
     setStatus("Error");
-    $("#eval-list").innerHTML = item("评测失败", formatError(error));
+    $("#eval-list").innerHTML = item("Eval failed", formatError(error));
   } finally {
     setBusy(false);
+  }
+});
+
+$("#user-create").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const userId = $("#new-user-id").value.trim();
+  const password = $("#new-user-password").value;
+  const role = $("#new-user-role").value;
+  if (!userId || !password) return;
+  try {
+    await getJson("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, password, role }),
+    });
+    $("#new-user-id").value = "";
+    $("#new-user-password").value = "";
+    await refresh();
+  } catch (error) {
+    $("#answer").textContent = formatError(error);
   }
 });
 
 document.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-
   const prompt = target.getAttribute("data-prompt");
   if (prompt) {
     $("#question").value = prompt;
     $("#question").focus();
     return;
   }
-
   const approve = target.getAttribute("data-approve");
   const reject = target.getAttribute("data-reject");
+  const deleteUser = target.getAttribute("data-delete-user");
   if (approve) await decideApproval(approve, true);
   if (reject) await decideApproval(reject, false);
+  if (deleteUser) {
+    await getJson(`/api/users/${encodeURIComponent(deleteUser)}`, { method: "DELETE" });
+    await refresh();
+  }
 });
 
 $("#refresh").addEventListener("click", refresh);
-$("#api-key").value = localStorage.getItem("researchops-api-key") || "";
-$("#api-key").addEventListener("change", (event) => {
-  localStorage.setItem("researchops-api-key", event.target.value);
-  refresh();
-});
+$("#api-key").value = localStorage.getItem(apiKeyKey) || localStorage.getItem(tokenKey) || "";
 refresh();

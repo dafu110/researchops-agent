@@ -105,11 +105,27 @@ class BuiltinTools:
 
         sql = self._extract_sql(question)
         if sql:
-            results.append(self._safe_tool("read_only_sql", lambda: sql_tool.query(sql), run_id, actor_id, tenant_id))
+            results.append(
+                self._safe_tool(
+                    "read_only_sql",
+                    lambda: sql_tool.query(sql),
+                    run_id,
+                    actor_id,
+                    tenant_id,
+                )
+            )
 
         code = self._extract_code(question)
         if code:
-            results.append(self._safe_tool("python_sandbox", lambda: python_sandbox.run(code), run_id, actor_id, tenant_id))
+            results.append(
+                self._safe_tool(
+                    "python_sandbox",
+                    lambda: python_sandbox.run(code),
+                    run_id,
+                    actor_id,
+                    tenant_id,
+                )
+            )
 
         if "mcp" in lowered:
             results.append(ToolResult(name="mcp_registry", output=mcp_registry.describe()))

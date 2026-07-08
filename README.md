@@ -28,7 +28,7 @@ quality checks into one auditable agent workspace.
 
 ```mermaid
 flowchart LR
-  UI["Chinese Dashboard"] --> API["FastAPI API"]
+  UI["SaaS Dashboard"] --> API["FastAPI API"]
   API --> Tasks["Task Queue"]
   API --> Orchestrator["Agent Orchestrator"]
   Orchestrator --> Planner["Planner"]
@@ -136,7 +136,8 @@ celery -A app.worker.celery_app worker --loglevel=INFO
 
 ## Safety Boundaries
 
-- API keys can map to user, role, tenant, and source allowlists.
+- API keys and local password users can create bearer sessions.
+- Users map to role, tenant, and source allowlists.
 - Documents, runs, traces, approvals, tasks, eval summaries, and audits are
   tenant-scoped.
 - URL ingestion only allows `http`/`https`, rejects embedded credentials, blocks
@@ -145,6 +146,45 @@ celery -A app.worker.celery_app worker --loglevel=INFO
 - Mutating/destructive intent is routed to human approval.
 - Python execution uses a restricted subprocess by default and supports Docker
   isolation for stronger boundaries.
+
+Example auth configuration:
+
+```env
+API_KEYS_JSON=[{"key":"admin-key","user_id":"admin","tenant_id":"acme","role":"admin"}]
+LOCAL_USERS_JSON=[{"user_id":"admin","password":"secret","tenant_id":"acme","role":"admin"}]
+```
+
+Create a session:
+
+```powershell
+Invoke-RestMethod `
+  -Uri http://localhost:8000/api/auth/login `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"api_key":"admin-key"}'
+```
+
+Docker sandbox mode:
+
+```env
+SANDBOX_MODE=docker
+SANDBOX_DOCKER_IMAGE=python:3.12-slim
+SANDBOX_MEMORY=128m
+SANDBOX_CPUS=0.5
+```
+
+MCP example server:
+
+```env
+MCP_SERVERS_JSON=[{"name":"example","command":"python","args":["scripts/example_mcp_server.py"]}]
+MCP_ALLOWED_TOOLS_JSON={"example":["echo","add","search_fixture","status"]}
+```
+
+User management endpoints for admins:
+
+- `GET /api/users`
+- `POST /api/users`
+- `DELETE /api/users/{user_id}`
 
 ## Quality Gates
 
@@ -157,9 +197,9 @@ celery -A app.worker.celery_app worker --loglevel=INFO
 Current local verification:
 
 ```text
-ruff check .: passed
-pytest -q: 10 passed
+compileall: passed
 eval gate: pass_rate=1.0, citation_correctness=1.0
+MCP stdio smoke test: passed
 ```
 
 Validate PostgreSQL + pgvector when Docker Compose is running:
@@ -171,6 +211,11 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 ## API Surface
 
 - `POST /api/ingest`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/users`
+- `POST /api/users`
+- `DELETE /api/users/{user_id}`
 - `POST /api/ingest/text`
 - `POST /api/ingest/text/async`
 - `POST /api/ingest/url`
@@ -202,7 +247,7 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 ## Roadmap
 
 - Add richer planner state transitions and retry/resume controls.
-- Promote file/PDF ingestion to Celery workers in production mode.
-- Add stricter MCP server/tool allowlists and per-tool approval policies.
-- Expand evals with adversarial prompt-injection and tool-failure fixtures.
+- Add real third-party MCP integration fixtures beyond the bundled example.
+- Add full user-management UI for creating users, roles, and source allowlists.
+- Expand evals with larger domain-specific and adversarial datasets.
 - Persist traces, tasks, approvals, and audits in PostgreSQL.
