@@ -17,6 +17,17 @@ def test_dashboard_smoke() -> None:
     assert "审计日志" in response.text
 
 
+def test_health_response_has_security_and_request_headers() -> None:
+    response = client.get("/health", headers={"X-Request-ID": "test-request-id"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "test-request-id"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+
+
 def test_async_text_ingest_and_task_queue() -> None:
     response = client.post(
         "/api/ingest/text/async",

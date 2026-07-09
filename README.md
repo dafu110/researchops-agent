@@ -278,3 +278,10 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 - Add full user-management UI for creating users, roles, and source allowlists.
 - Expand evals with larger domain-specific and adversarial datasets.
 - Persist traces, tasks, approvals, and audits in PostgreSQL.
+
+## Launch Readiness
+
+- [Launch hardening checklist](docs/launch-hardening.md)
+- [ADR: Planner, tool agent, and approval boundary](docs/adr/0001-planner-tool-approval-boundary.md)
+- [ADR: Shift-left launch gates and runtime headers](docs/adr/0002-shift-left-launch-gates.md)
+- GitHub Actions runs compile, lint, tests, eval gate, JavaScript syntax checks, and Docker build.
