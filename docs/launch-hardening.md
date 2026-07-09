@@ -10,6 +10,8 @@
 - Dashboard/API responses must include baseline security headers.
 - Docker images must run as a non-root user and expose a healthcheck.
 - Local `.venv`, caches, JSON runtime state, uploaded files, and generated reports must stay out of Git.
+- PostgreSQL mode must persist knowledge, traces, approvals, and audit records;
+  local JSON fallback is for development only.
 
 ## Recommended Pre-Launch Commands
 
@@ -30,7 +32,8 @@ python scripts\validate_postgres_store.py
 ## Portfolio Polish
 
 - Keep `docs/assets/dashboard.png` current.
-- Add release notes that distinguish local JSON mode from PostgreSQL/pgvector mode.
+- Add release notes that distinguish local JSON mode from PostgreSQL/pgvector
+  mode, including the remaining local-only task/session/user stores.
 - Include one demo trace showing planner, tool approval, RAG answer, audit replay, and eval gate.
 
 ## Agent-Skills Mapping

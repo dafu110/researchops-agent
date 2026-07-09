@@ -6,6 +6,13 @@ from uuid import uuid4
 
 from app.api.schemas import RunRecord, TraceStep
 from app.core.config import settings
+from app.core.runtime_db import (
+    init_schema,
+    load_psycopg,
+    psycopg_url,
+    should_raise_postgres_errors,
+    wants_postgres,
+)
 
 
 class TraceStore:
@@ -145,4 +152,151 @@ class timed_step:
         return False
 
 
-trace_store = TraceStore()
+class PostgresTraceStore:
+    def __init__(self) -> None:
+        self.psycopg = load_psycopg()
+        self.database_url = psycopg_url()
+        init_schema(self.psycopg, self.database_url)
+
+    def create_run(
+        self,
+        run_id: str,
+        question: str,
+        tenant_id: str = "default",
+        user_id: str = "local-dev",
+    ) -> RunRecord:
+        record = RunRecord(
+            run_id=run_id,
+            question=question,
+            status="created",
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        with self.psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                """
+                INSERT INTO runs (run_id, question, status, tenant_id, user_id)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (run_id) DO UPDATE SET
+                    question = EXCLUDED.question,
+                    status = EXCLUDED.status,
+                    tenant_id = EXCLUDED.tenant_id,
+                    user_id = EXCLUDED.user_id
+                """,
+                (
+                    record.run_id,
+                    record.question,
+                    record.status,
+                    record.tenant_id,
+                    record.user_id,
+                ),
+            )
+        return record
+
+    def set_status(self, run_id: str, status: str) -> None:
+        with self.psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                "UPDATE runs SET status = %s WHERE run_id = %s",
+                (status, run_id),
+            )
+
+    def get_run(self, run_id: str) -> RunRecord | None:
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(
+                "SELECT run_id, question, status, tenant_id, user_id FROM runs WHERE run_id = %s",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RunRecord(
+            run_id=row[0],
+            question=row[1],
+            status=row[2],
+            tenant_id=row[3],
+            user_id=row[4],
+        )
+
+    def add_step(
+        self,
+        run_id: str,
+        name: str,
+        status: str = "completed",
+        latency_ms: int | None = None,
+        error: str | None = None,
+    ) -> TraceStep:
+        step = TraceStep(
+            step_id=str(uuid4()),
+            name=name,
+            status=status,
+            latency_ms=latency_ms,
+            error=error,
+        )
+        with self.psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                """
+                INSERT INTO runs (run_id, question, status)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (run_id) DO NOTHING
+                """,
+                (run_id, "legacy run", status),
+            )
+            connection.execute(
+                """
+                INSERT INTO trace_steps (step_id, run_id, name, status, latency_ms, error)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    step.step_id,
+                    run_id,
+                    step.name,
+                    step.status,
+                    step.latency_ms,
+                    step.error,
+                ),
+            )
+        return step
+
+    def get_steps(self, run_id: str) -> list[TraceStep]:
+        with self.psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                """
+                SELECT step_id, name, status, latency_ms, error
+                FROM trace_steps
+                WHERE run_id = %s
+                ORDER BY created_at ASC
+                """,
+                (run_id,),
+            ).fetchall()
+        return [
+            TraceStep(
+                step_id=row[0],
+                name=row[1],
+                status=row[2],
+                latency_ms=row[3],
+                error=row[4],
+            )
+            for row in rows
+        ]
+
+    def run_count(self, tenant_id: str | None = None) -> int:
+        sql = "SELECT COUNT(*) FROM runs"
+        params: tuple[str, ...] = ()
+        if tenant_id:
+            sql += " WHERE tenant_id = %s"
+            params = (tenant_id,)
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(sql, params).fetchone()
+        return int(row[0]) if row else 0
+
+
+def _build_trace_store():
+    if wants_postgres():
+        try:
+            return PostgresTraceStore()
+        except Exception:
+            if should_raise_postgres_errors():
+                raise
+    return TraceStore()
+
+
+trace_store = _build_trace_store()

@@ -265,7 +265,8 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 - **Agent runtime:** deterministic local orchestrator, optional OpenAI Agents SDK
 - **RAG:** hybrid semantic + keyword retrieval, reranker, local embeddings,
   optional OpenAI embeddings
-- **Storage:** JSON local store, PostgreSQL + pgvector schema
+- **Storage:** JSON local fallback, PostgreSQL + pgvector for knowledge, traces,
+  approvals, and audits
 - **Queue:** FastAPI background tasks locally, Celery + Redis for workers
 - **Tools:** calculator, read-only SQLite, Python sandbox, reports, MCP registry
 - **Observability:** trace store, task store, audit store, eval gate
@@ -277,7 +278,7 @@ Validate PostgreSQL + pgvector when Docker Compose is running:
 - Add real third-party MCP integration fixtures beyond the bundled example.
 - Add full user-management UI for creating users, roles, and source allowlists.
 - Expand evals with larger domain-specific and adversarial datasets.
-- Persist traces, tasks, approvals, and audits in PostgreSQL.
+- Persist task records, sessions, and local user management in PostgreSQL.
 
 ## Launch Readiness
 

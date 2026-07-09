@@ -157,11 +157,13 @@ run/action approval record. Blocked attempts are written to audit with
 Local development uses `STORE_BACKEND=auto`, which tries PostgreSQL/pgvector and
 falls back to the JSON store when PostgreSQL is not reachable. Docker Compose
 sets `STORE_BACKEND=postgres` for both the API and worker, making pgvector the
-primary deployment path while keeping JSON as the local fallback.
+primary deployment path while keeping JSON as the local fallback. In PostgreSQL
+mode, knowledge documents/chunks, run traces, approval records, and audit
+records are persisted in the database.
 
 ## Remaining Production Work
 
-- Persist runs, traces, tasks, approvals, and audits in PostgreSQL.
+- Persist task records, sessions, and local user management in PostgreSQL.
 - Add stricter MCP server/tool allowlists and enforce per-tool approval policies.
 - Expand evals with adversarial prompt-injection and tool-failure fixtures.
 - Add stronger sandbox isolation defaults for hosted deployments.

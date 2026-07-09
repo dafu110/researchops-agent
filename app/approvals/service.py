@@ -5,6 +5,13 @@ from uuid import uuid4
 
 from app.api.schemas import ApprovalDecision, ApprovalRecord, ApprovalRequest
 from app.core.config import settings
+from app.core.runtime_db import (
+    init_schema,
+    load_psycopg,
+    psycopg_url,
+    should_raise_postgres_errors,
+    wants_postgres,
+)
 
 
 class ApprovalService:
@@ -89,4 +96,131 @@ class ApprovalService:
         self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-approval_service = ApprovalService()
+class PostgresApprovalService:
+    def __init__(self) -> None:
+        self.psycopg = load_psycopg()
+        self.database_url = psycopg_url()
+        init_schema(self.psycopg, self.database_url)
+
+    def create(self, request: ApprovalRequest) -> ApprovalRecord:
+        record = ApprovalRecord(
+            approval_id=str(uuid4()),
+            run_id=request.run_id,
+            action=request.action,
+            reason=request.reason,
+            risk_level=request.risk_level,
+            status="pending",
+            tenant_id=request.tenant_id,
+            requester_id=request.requester_id,
+        )
+        with self.psycopg.connect(self.database_url) as connection:
+            connection.execute(
+                """
+                INSERT INTO approvals
+                  (approval_id, run_id, action, reason, risk_level, status, reviewer,
+                   tenant_id, requester_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    record.approval_id,
+                    record.run_id,
+                    record.action,
+                    record.reason,
+                    record.risk_level,
+                    record.status,
+                    record.reviewer,
+                    record.tenant_id,
+                    record.requester_id,
+                ),
+            )
+        return record
+
+    def decide(
+        self,
+        approval_id: str,
+        decision: ApprovalDecision,
+        tenant_id: str | None = None,
+    ) -> ApprovalRecord | None:
+        filters = ["approval_id = %s"]
+        params: list[str] = [approval_id]
+        if tenant_id:
+            filters.append("tenant_id = %s")
+            params.append(tenant_id)
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(
+                f"""
+                UPDATE approvals
+                SET status = %s, reviewer = %s
+                WHERE {" AND ".join(filters)}
+                RETURNING approval_id, run_id, action, reason, risk_level, status,
+                          reviewer, tenant_id, requester_id
+                """,
+                ("approved" if decision.approved else "rejected", decision.reviewer, *params),
+            ).fetchone()
+        return _approval_from_row(row) if row else None
+
+    def list_records(self, tenant_id: str | None = None) -> list[ApprovalRecord]:
+        sql = (
+            "SELECT approval_id, run_id, action, reason, risk_level, status, reviewer, "
+            "tenant_id, requester_id FROM approvals"
+        )
+        params: tuple[str, ...] = ()
+        if tenant_id:
+            sql += " WHERE tenant_id = %s"
+            params = (tenant_id,)
+        sql += " ORDER BY created_at ASC"
+        with self.psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [_approval_from_row(row) for row in rows]
+
+    def find_for_run_action(
+        self,
+        run_id: str,
+        action: str,
+        tenant_id: str | None = None,
+        statuses: set[str] | None = None,
+    ) -> ApprovalRecord | None:
+        filters = ["run_id = %s", "action = %s"]
+        params: list[object] = [run_id, action]
+        if tenant_id is not None:
+            filters.append("tenant_id = %s")
+            params.append(tenant_id)
+        if statuses is not None:
+            filters.append("status = ANY(%s)")
+            params.append(list(statuses))
+        sql = (
+            "SELECT approval_id, run_id, action, reason, risk_level, status, reviewer, "
+            "tenant_id, requester_id FROM approvals WHERE "
+            + " AND ".join(filters)
+            + " ORDER BY created_at DESC LIMIT 1"
+        )
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(sql, tuple(params)).fetchone()
+        return _approval_from_row(row) if row else None
+
+
+def _approval_from_row(row) -> ApprovalRecord:
+    return ApprovalRecord(
+        approval_id=row[0],
+        run_id=row[1],
+        action=row[2],
+        reason=row[3],
+        risk_level=row[4],
+        status=row[5],
+        reviewer=row[6],
+        tenant_id=row[7],
+        requester_id=row[8],
+    )
+
+
+def _build_approval_service():
+    if wants_postgres():
+        try:
+            return PostgresApprovalService()
+        except Exception:
+            if should_raise_postgres_errors():
+                raise
+    return ApprovalService()
+
+
+approval_service = _build_approval_service()
