@@ -1,5 +1,8 @@
 # ResearchOps Agent
 
+[![CI](https://github.com/dafu110/researchops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dafu110/researchops-agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 > 我设计并实现了一个可控、可追溯的企业研究 Agent：它让研究结论有证据、工具操作有边界、人工审批可恢复、历史记录可治理。
 
 ![ResearchOps workspace](docs/assets/dashboard.png)
@@ -24,8 +27,14 @@ flowchart LR
 
 ## 启动
 
+先创建本地配置。示例配置默认使用本地演示路径；只有接入外部模型、数据库或 MCP 时才需要替换对应变量。
+
 ```powershell
 cd <path-to-researchops-agent>
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -34,6 +43,14 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 打开 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)。
+
+## 三分钟演示
+
+1. 运行 `python scripts\seed_demo_data.py`；脚本会打印文档、回答、工具调用和审批记录的标识符。
+2. 在工作台提问“ResearchOps Agent 支持哪些能力？”，确认回答包含引用。
+3. 打开 `GET /api/runs/{run_id}/trace`，检查计划、模型调用、工具状态和审批边界是否可追溯。
+
+完整的求职案例见 [docs/job-search-case-study.md](docs/job-search-case-study.md)，控制和评测契约见 [docs/agent-control-spec.md](docs/agent-control-spec.md)。
 
 关键可验证接口：
 
@@ -67,3 +84,7 @@ python scripts\run_agent_self_check.py
 - [闭环就绪报告](docs/closed-loop-readiness.md)
 - [架构说明](docs/architecture.md)
 - [审批边界 ADR](docs/adr/0001-planner-tool-approval-boundary.md)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
