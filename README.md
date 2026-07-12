@@ -5,27 +5,13 @@
 
 > 我设计并实现了一个可控、可追溯的企业研究 Agent：它让研究结论有证据、工具操作有边界、人工审批可恢复、历史记录可治理。
 
+## 项目概览
+
+面向企业研究场景的可控 Agent，覆盖证据检索、受限工具调用、人工审批、运行追踪和离线评测。
+
 ## 界面预览
 
 ![ResearchOps workspace](docs/assets/dashboard.png)
-
-## 核心能力与架构
-
-```mermaid
-flowchart LR
-  A["选择已授权资料"] --> B["Planner: 生成结构化计划"]
-  B --> C["工具调用: 参数校验、超时、重试、幂等"]
-  C --> D{"是否跨越风险边界"}
-  D -- "否" --> E["生成带引用的 FinalAnswer"]
-  D -- "是" --> F["人工审批"]
-  F -- "批准" --> G["相同 run_id 恢复"]
-  G --> E
-  F -- "拒绝" --> H["停止受控步骤"]
-  E --> I["Trace、Audit、Metrics 与历史治理"]
-  H --> I
-```
-
-一次运行中，`AskRequest`、`PlanStepDetail`、`ToolCallRecord`、`FinalAnswer` 与 `TraceStep` 均为 Pydantic 契约。每一步保存输入、输出、模型、Token 使用、耗时与错误；工具记录还保存超时、尝试次数、幂等键、取消状态和恢复入口。
 
 ## 快速开始
 
@@ -62,6 +48,26 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 - `POST /api/runs/{run_id}/cancel` / `recover`：请求取消或从可恢复失败状态继续。
 - `GET /api/metrics`：成功率、P95 时延、工具失败率、人工审批率与有成本样本的单任务成本。
 
+## 核心能力
+
+### 架构与实现
+
+```mermaid
+flowchart LR
+  A["选择已授权资料"] --> B["Planner: 生成结构化计划"]
+  B --> C["工具调用: 参数校验、超时、重试、幂等"]
+  C --> D{"是否跨越风险边界"}
+  D -- "否" --> E["生成带引用的 FinalAnswer"]
+  D -- "是" --> F["人工审批"]
+  F -- "批准" --> G["相同 run_id 恢复"]
+  G --> E
+  F -- "拒绝" --> H["停止受控步骤"]
+  E --> I["Trace、Audit、Metrics 与历史治理"]
+  H --> I
+```
+
+一次运行中，`AskRequest`、`PlanStepDetail`、`ToolCallRecord`、`FinalAnswer` 与 `TraceStep` 均为 Pydantic 契约。每一步保存输入、输出、模型、Token 使用、耗时与错误；工具记录还保存超时、尝试次数、幂等键、取消状态和恢复入口。
+
 ## 测试与验证
 
 ```powershell
@@ -72,13 +78,22 @@ python scripts\run_agent_self_check.py
 
 评测门禁包含 32 条案例，覆盖引用、越权资料、提示注入、高风险工具、审批拒绝/恢复、工具超时、结构化契约与运行指标。
 
-## 生产边界（明确未验证项）
+## 部署与生产
+
+### 生产边界
 
 - 本地 JSON 回退仅适用于单进程开发；生产持久化必须使用 PostgreSQL + pgvector，并在目标环境完成迁移、并发、备份与恢复演练。当前仓库提供了 schema 与运行接口，但未宣称已完成生产端到端验证。
 - MCP 注册表与示例服务器用于本地策略和协议测试；真实第三方 MCP、写入型连接器及其凭证、网络、幂等与故障恢复尚未完成生产验证。
 - 本地 Python sandbox 有进程限制；托管环境应启用 Docker 隔离并进行资源与逃逸测试。
 
-## 相关文档
+## 项目结构
+
+- `app/`：FastAPI 服务、Agent 编排、存储和安全控制。
+- `scripts/`：演示数据、评测门禁和自检脚本。
+- `tests/`：单元测试与 API smoke 测试。
+- `docs/`：架构、案例、控制契约和就绪说明。
+
+## 相关文档与上线准备
 
 - [求职案例](docs/job-search-case-study.md)
 - [Agent 控制与评测规范](docs/agent-control-spec.md)
