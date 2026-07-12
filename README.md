@@ -5,9 +5,11 @@
 
 > 我设计并实现了一个可控、可追溯的企业研究 Agent：它让研究结论有证据、工具操作有边界、人工审批可恢复、历史记录可治理。
 
+## 界面预览
+
 ![ResearchOps workspace](docs/assets/dashboard.png)
 
-## 一个研究 Agent 主流程
+## 核心能力与架构
 
 ```mermaid
 flowchart LR
@@ -25,7 +27,7 @@ flowchart LR
 
 一次运行中，`AskRequest`、`PlanStepDetail`、`ToolCallRecord`、`FinalAnswer` 与 `TraceStep` 均为 Pydantic 契约。每一步保存输入、输出、模型、Token 使用、耗时与错误；工具记录还保存超时、尝试次数、幂等键、取消状态和恢复入口。
 
-## 启动
+## 快速开始
 
 先创建本地配置。示例配置默认使用本地演示路径；只有接入外部模型、数据库或 MCP 时才需要替换对应变量。
 
@@ -44,7 +46,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 打开 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)。
 
-## 三分钟演示
+## 演示与验证
 
 1. 运行 `python scripts\seed_demo_data.py`；脚本会打印文档、回答、工具调用和审批记录的标识符。
 2. 在工作台提问“ResearchOps Agent 支持哪些能力？”，确认回答包含引用。
@@ -60,7 +62,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 - `POST /api/runs/{run_id}/cancel` / `recover`：请求取消或从可恢复失败状态继续。
 - `GET /api/metrics`：成功率、P95 时延、工具失败率、人工审批率与有成本样本的单任务成本。
 
-## 验证
+## 测试与验证
 
 ```powershell
 python -m compileall app tests
@@ -85,6 +87,6 @@ python scripts\run_agent_self_check.py
 - [架构说明](docs/architecture.md)
 - [审批边界 ADR](docs/adr/0001-planner-tool-approval-boundary.md)
 
-## License
+## 许可证
 
 MIT. See [LICENSE](LICENSE).
