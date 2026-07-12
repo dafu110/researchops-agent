@@ -97,7 +97,8 @@ docker compose up --build
 
 - 本地 JSON 回退仅适用于单进程开发；生产持久化必须使用 PostgreSQL + pgvector，并在目标环境完成迁移、并发、备份与恢复演练。当前仓库提供了 schema 与运行接口，但未宣称已完成生产端到端验证。
 - MCP 注册表与示例服务器用于本地策略和协议测试；真实第三方 MCP、写入型连接器及其凭证、网络、幂等与故障恢复尚未完成生产验证。
-- 本地 Python sandbox 有进程限制；托管环境应启用 Docker 隔离并进行资源与逃逸测试。
+- 用户提供的 Python 仅在 Docker sandbox 中执行，带无网络、只读文件系统和资源限制；未启用 Docker 时该工具会拒绝执行，不会回退到主机进程。
+- 默认配置要求认证。仅在显式设置 `AUTH_REQUIRED=false` 且 `APP_ENV` 为 `local`、`development`、`dev` 或 `test` 时，才会启用本地 demo 管理员身份。
 
 ## 项目结构
 

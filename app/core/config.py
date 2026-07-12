@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     mcp_timeout_seconds: int = 8
     api_keys_json: str = "[]"
     local_users_json: str = "[]"
-    auth_required: bool = False
+    auth_required: bool = True
     session_ttl_seconds: int = 28_800
     default_tenant_id: str = "default"
-    sandbox_mode: str = "process"
+    sandbox_mode: str = "docker"
     sandbox_docker_image: str = "python:3.12-slim"
     sandbox_memory: str = "128m"
     sandbox_cpus: str = "0.5"

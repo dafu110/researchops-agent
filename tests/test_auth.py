@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
@@ -66,6 +67,16 @@ def test_password_login_and_bearer_session(monkeypatch) -> None:
 
     assert loaded_user.user_id == "admin"
     assert loaded_user.can_approve is True
+
+
+def test_nonlocal_deployment_rejects_unconfigured_authentication(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_keys_json", "[]")
+    monkeypatch.setattr(settings, "local_users_json", "[]")
+    monkeypatch.setattr(settings, "auth_required", False)
+    monkeypatch.setattr(settings, "app_env", "production")
+
+    with pytest.raises(Exception, match="Authentication is required"):
+        asyncio.run(current_user(authorization=None, x_api_key=None))
 
 
 def test_admin_can_create_and_delete_tenant_user(monkeypatch) -> None:

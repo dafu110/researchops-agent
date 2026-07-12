@@ -181,7 +181,12 @@ async def current_user(
     if api_user:
         return api_user
 
-    if not configured_api_users() and not configured_password_users() and not settings.auth_required:
+    if (
+        not configured_api_users()
+        and not configured_password_users()
+        and not settings.auth_required
+        and settings.app_env.lower() in {"local", "development", "dev", "test"}
+    ):
         return UserContext(
             user_id="local-dev",
             tenant_id=settings.default_tenant_id,

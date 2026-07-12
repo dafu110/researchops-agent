@@ -21,9 +21,9 @@ class PythonSandbox:
                 raise ValueError(f"Blocked name: {node.id}")
 
         wrapper = self._wrap_code(code)
-        if settings.sandbox_mode == "docker":
-            return self._run_docker(wrapper)
-        return self._run_process(wrapper)
+        if settings.sandbox_mode != "docker":
+            raise RuntimeError("Docker sandbox mode is required for user-provided Python code.")
+        return self._run_docker(wrapper)
 
     def _run_process(self, wrapper: str) -> str:
         with tempfile.TemporaryDirectory(prefix="researchops-sandbox-") as tmp:

@@ -1,5 +1,7 @@
 import subprocess
 
+import pytest
+
 from app.core.config import settings
 from app.tools.sandbox import PythonSandbox
 
@@ -7,9 +9,8 @@ from app.tools.sandbox import PythonSandbox
 def test_process_sandbox_runs_basic_code() -> None:
     settings.sandbox_mode = "process"
 
-    output = PythonSandbox().run("print(sum(range(5)))")
-
-    assert output == "10"
+    with pytest.raises(RuntimeError, match="Docker"):
+        PythonSandbox().run("print(sum(range(5)))")
 
 
 def test_sandbox_blocks_open() -> None:
@@ -21,6 +22,13 @@ def test_sandbox_blocks_open() -> None:
         assert "Blocked name" in str(exc)
     else:
         raise AssertionError("Expected sandbox to block open().")
+
+
+def test_process_sandbox_rejects_dunder_import_escape() -> None:
+    settings.sandbox_mode = "process"
+
+    with pytest.raises(RuntimeError, match="Docker"):
+        PythonSandbox().run("print(print.__self__.__import__('os').getcwd())")
 
 
 def test_docker_sandbox_uses_resource_limits(monkeypatch) -> None:

@@ -49,7 +49,7 @@ def test_failure_recovery_reuses_the_same_run_id() -> None:
     request = AskRequest(question="```python\nwhile True:\n    pass\n```", require_citations=False)
     initial = asyncio.run(orchestrator.answer(request, user))
 
-    assert any(call.status == "timeout" for call in initial.tool_calls)
+    assert any(call.status in {"timeout", "failed"} for call in initial.tool_calls)
     recovered = asyncio.run(orchestrator.recover(initial.run_id, user))
 
     assert recovered.run_id == initial.run_id
