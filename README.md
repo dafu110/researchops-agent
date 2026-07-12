@@ -3,7 +3,7 @@
 [![CI](https://github.com/dafu110/researchops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dafu110/researchops-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> 我设计并实现了一个可控、可追溯的企业研究 Agent：它让研究结论有证据、工具操作有边界、人工审批可恢复、历史记录可治理。
+我设计并实现了一个可控、可追溯的企业研究 Agent：它让研究结论有证据、工具操作有边界、人工审批可恢复、历史记录可治理。
 
 ## 项目概览
 
