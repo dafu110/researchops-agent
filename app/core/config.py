@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     url_fetch_timeout_seconds: int = 15
     url_fetch_max_redirects: int = 3
     task_backend: str = "local"
+    agent_max_tool_calls: int = 4
     github_repo_file_max_bytes: int = 80_000
     github_repo_max_text_chars: int = 500_000
 

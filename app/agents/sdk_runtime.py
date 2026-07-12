@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from app.core.config import settings
 
@@ -11,7 +12,12 @@ class SDKRunResult:
 
 
 class OpenAIAgentsRuntime:
-    async def run_research_summary(self, question: str, evidence: str) -> SDKRunResult:
+    async def run_research_summary(
+        self,
+        question: str,
+        evidence: str,
+        mode: Literal["quick", "evidence", "report"] = "evidence",
+    ) -> SDKRunResult:
         if settings.agent_runtime == "local":
             return SDKRunResult(used_sdk=False, output="")
         if not settings.openai_api_key:
@@ -27,12 +33,19 @@ class OpenAIAgentsRuntime:
             """Return retrieved evidence that must ground the answer."""
             return evidence
 
+        mode_instruction = {
+            "quick": "Answer directly and concisely.",
+            "evidence": "State a clear conclusion and cite the available evidence for each material claim.",
+            "report": "Structure the response with a conclusion, evidence, uncertainty, and next steps.",
+        }[mode]
         agent = Agent(
             name="ResearchOps Research Agent",
             instructions=(
                 "Answer only from get_grounding_evidence. "
                 "If evidence is insufficient, say that directly. "
-                "Keep the answer concise and cite source labels from the evidence."
+                "Use the same language as the user's question. "
+                "Keep the answer concise and cite source labels from the evidence. "
+                + mode_instruction
             ),
             model=settings.openai_agent_model,
             tools=[get_grounding_evidence],

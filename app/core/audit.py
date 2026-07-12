@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.api.schemas import AuditRecord
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 from app.core.runtime_db import (
     init_schema,
     load_psycopg,
@@ -72,16 +73,29 @@ class AuditService:
             records = [record for record in records if record.run_id == run_id]
         return list(reversed(records[-50:]))
 
+    def delete_for_run(self, run_id: str, tenant_id: str) -> int:
+        with self._lock:
+            before = len(self._records)
+            self._records = [
+                record
+                for record in self._records
+                if not (record.run_id == run_id and record.tenant_id == tenant_id)
+            ]
+            deleted = before - len(self._records)
+            if deleted:
+                self._save()
+        return deleted
+
     def _load(self) -> None:
         if not self.state_path.exists():
             return
-        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        payload = load_json_or_default(self.state_path, [])
         self._records = [AuditRecord.model_validate(item) for item in payload]
 
     def _save(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         payload = [record.model_dump() for record in self._records]
-        self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_json_write(self.state_path, payload)
 
 
 class PostgresAuditService:
@@ -183,6 +197,14 @@ class PostgresAuditService:
             )
             for row in rows
         ]
+
+    def delete_for_run(self, run_id: str, tenant_id: str) -> int:
+        with self.psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                "DELETE FROM audit_records WHERE run_id = %s AND tenant_id = %s RETURNING audit_id",
+                (run_id, tenant_id),
+            ).fetchall()
+        return len(rows)
 
 
 def _build_audit_service():

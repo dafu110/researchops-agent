@@ -8,6 +8,7 @@ from threading import Lock
 from fastapi import Header, HTTPException
 
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
@@ -34,6 +35,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "retry_task",
         "cancel_task",
         "approve",
+        "delete_run",
         "manage_users",
         "read_system_config",
     ],
@@ -96,11 +98,11 @@ class SessionService:
     def _load(self) -> None:
         if not self.path.exists():
             return
-        self._sessions = json.loads(self.path.read_text(encoding="utf-8"))
+        self._sessions = load_json_or_default(self.path, {})
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._sessions, indent=2), encoding="utf-8")
+        atomic_json_write(self.path, self._sessions)
 
 
 def configured_api_users() -> dict[str, UserContext]:

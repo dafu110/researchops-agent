@@ -6,6 +6,7 @@ from threading import Lock
 
 from app.api.schemas import UserCreateRequest, UserRecord
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 from app.core.security import UserContext
 
 
@@ -77,11 +78,11 @@ class UserService:
     def _load(self) -> None:
         if not self.path.exists():
             return
-        self._records = json.loads(self.path.read_text(encoding="utf-8"))
+        self._records = load_json_or_default(self.path, {})
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._records, indent=2), encoding="utf-8")
+        atomic_json_write(self.path, self._records)
 
 
 def _hash_password(password: str, salt: str) -> str:

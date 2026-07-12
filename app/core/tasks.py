@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.api.schemas import TaskRecord
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 
 
 class TaskService:
@@ -161,7 +162,7 @@ class TaskService:
     def _load(self) -> None:
         if not self.state_path.exists():
             return
-        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        payload = load_json_or_default(self.state_path, [])
         self._records = {
             item["task_id"]: TaskRecord.model_validate(item)
             for item in payload
@@ -170,7 +171,7 @@ class TaskService:
     def _save(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         payload = [record.model_dump() for record in self._records.values()]
-        self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_json_write(self.state_path, payload)
 
 
 task_service = TaskService()

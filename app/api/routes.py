@@ -1,9 +1,12 @@
+from math import ceil
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 
 from app.agents.orchestrator import AgentOrchestrator
 from app.api.schemas import (
     ApprovalDecision,
     ApprovalRecord,
+    AgentMetricsResponse,
     AskRequest,
     AskResponse,
     AuditRecord,
@@ -13,14 +16,19 @@ from app.api.schemas import (
     DocumentSummary,
     EvalRunResponse,
     EvalSummary,
+    FinalAnswer,
     IngestGitHubRepoRequest,
     IngestResponse,
     IngestTextRequest,
     IngestUrlRequest,
+    RunRecord,
     RunTraceResponse,
     SystemConfigResponse,
     TaskCreateResponse,
     TaskRecord,
+    ToolCallRecord,
+    PlanStepDetail,
+    TraceStep,
     UserCreateRequest,
     UserProfile,
     UserRecord,
@@ -272,15 +280,105 @@ async def list_documents(user: UserContext = Depends(current_user)) -> list[Docu
     ]
 
 
+@router.delete("/documents/{document_id}", response_model=dict)
+async def delete_document(document_id: str, user: UserContext = Depends(current_user)) -> dict:
+    require_ingest(user)
+    deleted = knowledge_store.delete_document(document_id, user.tenant_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return {"deleted": True}
+
+
+@router.get("/runs", response_model=list[RunRecord])
+async def list_runs(user: UserContext = Depends(current_user)) -> list[RunRecord]:
+    return trace_store.list_runs(user.tenant_id)
+
+
+@router.delete("/runs/{run_id}", response_model=dict)
+async def delete_run(run_id: str, user: UserContext = Depends(current_user)) -> dict:
+    if not user.has_permission("delete_run"):
+        raise HTTPException(status_code=403, detail="Research deletion permission is required.")
+    deleted = trace_store.delete_run(run_id, user.tenant_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Research run not found.")
+    approvals_deleted = approval_service.delete_for_run(run_id, user.tenant_id)
+    audit_deleted = audit_service.delete_for_run(run_id, user.tenant_id)
+    audit_service.record(
+        action="delete_run",
+        target="research_run",
+        risk_level="medium",
+        status="completed",
+        detail=f"Deleted one research run with {approvals_deleted} approvals and {audit_deleted} detailed audit records.",
+        actor_id=user.user_id,
+        tenant_id=user.tenant_id,
+    )
+    return {"deleted": True}
+
+
 @router.get("/runs/{run_id}/trace", response_model=RunTraceResponse)
 async def get_trace(
     run_id: str,
     user: UserContext = Depends(current_user),
 ) -> RunTraceResponse:
     run = trace_store.get_run(run_id)
-    if run and run.tenant_id != user.tenant_id:
+    if run is None or run.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Trace not found.")
-    return RunTraceResponse(run_id=run_id, steps=trace_store.get_steps(run_id))
+    return RunTraceResponse(
+        run_id=run_id,
+        steps=trace_store.get_steps(run_id),
+        tool_calls=trace_store.get_tool_calls(run_id),
+    )
+
+
+@router.get("/runs/{run_id}/tools", response_model=list[ToolCallRecord])
+async def get_run_tools(run_id: str, user: UserContext = Depends(current_user)) -> list[ToolCallRecord]:
+    run = trace_store.get_run(run_id)
+    if run is None or run.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return trace_store.get_tool_calls(run_id)
+
+
+@router.post("/runs/{run_id}/cancel", response_model=dict)
+async def cancel_run(run_id: str, user: UserContext = Depends(current_user)) -> dict:
+    require_approval(user)
+    run = trace_store.get_run(run_id)
+    if run is None or run.tenant_id != user.tenant_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    if run.status in {"completed", "failed", "canceled", "rejected"}:
+        raise HTTPException(status_code=409, detail=f"Run is already {run.status}.")
+    if not trace_store.request_cancel(run_id, user.tenant_id):
+        raise HTTPException(status_code=404, detail="Run not found.")
+    trace_store.add_step(
+        run_id,
+        "run_cancellation_requested",
+        status="completed",
+        input_payload={"requested_by": user.user_id},
+        output_payload={"safe_checkpoint": "next tool boundary"},
+        model="workflow-controller",
+    )
+    return {"run_id": run_id, "cancel_requested": True}
+
+
+@router.post("/runs/{run_id}/resume", response_model=AskResponse)
+async def resume_run(run_id: str, user: UserContext = Depends(current_user)) -> AskResponse:
+    require_approval(user)
+    try:
+        return await orchestrator.resume(run_id, user)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if message == "Run not found." else 409
+        raise HTTPException(status_code=status_code, detail=message) from exc
+
+
+@router.post("/runs/{run_id}/recover", response_model=AskResponse)
+async def recover_run(run_id: str, user: UserContext = Depends(current_user)) -> AskResponse:
+    require_approval(user)
+    try:
+        return await orchestrator.recover(run_id, user)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if message == "Run not found." else 409
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @router.get("/approvals", response_model=list[ApprovalRecord])
@@ -295,9 +393,24 @@ async def decide_approval(
     user: UserContext = Depends(current_user),
 ) -> ApprovalRecord:
     require_approval(user)
+    existing = approval_service.get(approval_id, tenant_id=user.tenant_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Approval not found.")
+    if existing.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Approval is already {existing.status}.")
     record = approval_service.decide(approval_id, decision, tenant_id=user.tenant_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Approval not found.")
+    if not decision.approved:
+        trace_store.set_status(record.run_id, "rejected")
+        trace_store.add_step(
+            record.run_id,
+            "approval_rejected",
+            status="completed",
+            input_payload={"approval_id": approval_id, "reviewer": user.user_id},
+            output_payload={"status": "rejected"},
+            model="workflow-controller",
+        )
     return record
 
 
@@ -315,8 +428,56 @@ async def eval_summary(user: UserContext = Depends(current_user)) -> EvalSummary
     )
 
 
+@router.get("/metrics", response_model=AgentMetricsResponse)
+async def metrics(user: UserContext = Depends(current_user)) -> AgentMetricsResponse:
+    runs = trace_store.list_runs(user.tenant_id, limit=1000)
+    terminal = [run for run in runs if run.status in {"completed", "failed", "canceled", "rejected"}]
+    successful = [run for run in terminal if run.status == "completed"]
+    latencies = [
+        sum(step.latency_ms or 0 for step in trace_store.get_steps(run.run_id))
+        for run in terminal
+    ]
+    all_tool_calls = [call for run in runs for call in trace_store.get_tool_calls(run.run_id)]
+    tool_failures = [call for call in all_tool_calls if call.status in {"failed", "timeout", "canceled"}]
+    approved_or_pending_runs = {
+        record.run_id
+        for record in approval_service.list_records(user.tenant_id)
+    }
+    costs = [
+        run.final_answer.cost_usd
+        for run in terminal
+        if run.final_answer and run.final_answer.cost_usd is not None
+    ]
+    return AgentMetricsResponse(
+        tenant_id=user.tenant_id,
+        total_runs=len(runs),
+        terminal_runs=len(terminal),
+        success_rate=len(successful) / len(terminal) if terminal else 0.0,
+        p95_latency_ms=_p95(latencies),
+        total_tool_calls=len(all_tool_calls),
+        tool_failure_rate=len(tool_failures) / len(all_tool_calls) if all_tool_calls else 0.0,
+        approval_rate=sum(1 for run in runs if run.run_id in approved_or_pending_runs) / len(runs) if runs else 0.0,
+        average_task_cost_usd=sum(costs) / len(costs) if costs else None,
+        cost_sample_count=len(costs),
+    )
+
+
+@router.get("/contracts", response_model=dict)
+async def agent_contracts(user: UserContext = Depends(current_user)) -> dict:
+    del user
+    return {
+        "ask_request": AskRequest.model_json_schema(),
+        "plan_step": PlanStepDetail.model_json_schema(),
+        "tool_call": ToolCallRecord.model_json_schema(),
+        "final_answer": FinalAnswer.model_json_schema(),
+        "trace_step": TraceStep.model_json_schema(),
+    }
+
+
 @router.post("/eval/run", response_model=EvalRunResponse)
 async def run_eval(user: UserContext = Depends(current_user)) -> EvalRunResponse:
+    if not user.has_permission("run_eval"):
+        raise HTTPException(status_code=403, detail="Evaluation permission is required.")
     return await eval_service.run_golden(user)
 
 
@@ -325,6 +486,8 @@ async def run_eval_async(
     background_tasks: BackgroundTasks,
     user: UserContext = Depends(current_user),
 ) -> TaskCreateResponse:
+    if not user.has_permission("run_eval"):
+        raise HTTPException(status_code=403, detail="Evaluation permission is required.")
     payload = {"user": user_context_payload(user)}
     task = task_service.create("eval_run", "Eval gate", user.tenant_id, user.user_id, payload)
     _enqueue_task(
@@ -390,7 +553,7 @@ async def list_audit(
 @router.get("/audit/replay/{run_id}", response_model=AuditReplayResponse)
 async def replay_audit(run_id: str, user: UserContext = Depends(current_user)) -> AuditReplayResponse:
     run = trace_store.get_run(run_id)
-    if run and run.tenant_id != user.tenant_id:
+    if run is None or run.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Run not found.")
     return AuditReplayResponse(
         run_id=run_id,
@@ -418,6 +581,7 @@ async def system_config(user: UserContext = Depends(current_user)) -> SystemConf
             "retrieval_top_k": settings.retrieval_top_k,
             "mcp_timeout_seconds": settings.mcp_timeout_seconds,
             "sandbox_timeout_seconds": settings.sandbox_timeout_seconds,
+            "agent_max_tool_calls": settings.agent_max_tool_calls,
             "session_ttl_seconds": settings.session_ttl_seconds,
         },
     )
@@ -431,6 +595,13 @@ async def recover_tasks(user: UserContext = Depends(current_user)) -> dict:
 
 def _active_store_name() -> str:
     return knowledge_store.__class__.__name__.replace("KnowledgeStore", "").lower()
+
+
+def _p95(values: list[int]) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, ceil(len(ordered) * 0.95) - 1)]
 
 
 def _requeue_task(task: TaskRecord, background_tasks: BackgroundTasks) -> None:

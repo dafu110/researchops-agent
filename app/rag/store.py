@@ -4,6 +4,7 @@ from threading import Lock
 from uuid import uuid4
 
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 from app.rag.chunker import TextChunker
 from app.rag.embeddings import embedding_service
 from app.rag.models import Chunk, Document
@@ -50,6 +51,20 @@ class JsonKnowledgeStore:
             documents = [document for document in documents if document.tenant_id == tenant_id]
         return [(document, self.count_chunks(document.document_id)) for document in documents]
 
+    def delete_document(self, document_id: str, tenant_id: str | None = None) -> bool:
+        with self._lock:
+            document = self._documents.get(document_id)
+            if document is None or (tenant_id and document.tenant_id != tenant_id):
+                return False
+            self._documents.pop(document_id, None)
+            self._chunks = {
+                chunk_id: chunk
+                for chunk_id, chunk in self._chunks.items()
+                if chunk.document_id != document_id
+            }
+            self._save()
+        return True
+
     def count_chunks(
         self,
         document_id: str | None = None,
@@ -94,7 +109,7 @@ class JsonKnowledgeStore:
     def _load(self) -> None:
         if not self.state_path.exists():
             return
-        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        payload = load_json_or_default(self.state_path, {})
         self._documents = {
             item["document_id"]: Document.model_validate(item)
             for item in payload.get("documents", [])
@@ -116,7 +131,7 @@ class JsonKnowledgeStore:
             "documents": [document.model_dump() for document in self._documents.values()],
             "chunks": [chunk.model_dump() for chunk in self._chunks.values()],
         }
-        self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_json_write(self.state_path, payload)
 
 
 class PostgresKnowledgeStore:
@@ -210,6 +225,19 @@ class PostgresKnowledgeStore:
             )
             for row in rows
         ]
+
+    def delete_document(self, document_id: str, tenant_id: str | None = None) -> bool:
+        filters = ["document_id::text = %s"]
+        params: list[str] = [document_id]
+        if tenant_id:
+            filters.append("metadata->>'tenant_id' = %s")
+            params.append(tenant_id)
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(
+                "DELETE FROM documents WHERE " + " AND ".join(filters) + " RETURNING document_id",
+                tuple(params),
+            ).fetchone()
+        return row is not None
 
     def count_chunks(
         self,

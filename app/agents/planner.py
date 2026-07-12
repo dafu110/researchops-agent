@@ -1,16 +1,6 @@
-from pydantic import BaseModel
+from app.api.schemas import PlanStepDetail
 
-
-class PlanStep(BaseModel):
-    name: str
-    stage: str
-    goal: str
-    mode: str = "automatic"
-    tool_hint: str | None = None
-    risk_level: str = "low"
-    confidence: float = 1.0
-    needs_tool: bool = False
-    needs_approval: bool = False
+PlanStep = PlanStepDetail
 
 
 class PlannerAgent:

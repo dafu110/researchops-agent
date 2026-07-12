@@ -1,10 +1,10 @@
-import json
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
 from app.api.schemas import ApprovalDecision, ApprovalRecord, ApprovalRequest
 from app.core.config import settings
+from app.core.json_state import atomic_json_write, load_json_or_default
 from app.core.runtime_db import (
     init_schema,
     load_psycopg,
@@ -12,8 +12,6 @@ from app.core.runtime_db import (
     should_raise_postgres_errors,
     wants_postgres,
 )
-
-
 class ApprovalService:
     def __init__(self) -> None:
         self.data_dir = Path(settings.data_dir)
@@ -50,6 +48,8 @@ class ApprovalService:
                 return None
             if tenant_id and record.tenant_id != tenant_id:
                 return None
+            if record.status != "pending":
+                return record
             record.status = "approved" if decision.approved else "rejected"
             record.reviewer = decision.reviewer
             self._save()
@@ -61,6 +61,26 @@ class ApprovalService:
         if tenant_id:
             records = [record for record in records if record.tenant_id == tenant_id]
         return records
+
+    def get(self, approval_id: str, tenant_id: str | None = None) -> ApprovalRecord | None:
+        with self._lock:
+            record = self._records.get(approval_id)
+        if record is None or (tenant_id and record.tenant_id != tenant_id):
+            return None
+        return record
+
+    def delete_for_run(self, run_id: str, tenant_id: str) -> int:
+        with self._lock:
+            approval_ids = [
+                approval_id
+                for approval_id, record in self._records.items()
+                if record.run_id == run_id and record.tenant_id == tenant_id
+            ]
+            for approval_id in approval_ids:
+                self._records.pop(approval_id, None)
+            if approval_ids:
+                self._save()
+        return len(approval_ids)
 
     def find_for_run_action(
         self,
@@ -84,7 +104,7 @@ class ApprovalService:
     def _load(self) -> None:
         if not self.state_path.exists():
             return
-        payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+        payload = load_json_or_default(self.state_path, [])
         self._records = {
             item["approval_id"]: ApprovalRecord.model_validate(item)
             for item in payload
@@ -93,7 +113,7 @@ class ApprovalService:
     def _save(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         payload = [record.model_dump() for record in self._records.values()]
-        self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_json_write(self.state_path, payload)
 
 
 class PostgresApprovalService:
@@ -151,7 +171,7 @@ class PostgresApprovalService:
                 f"""
                 UPDATE approvals
                 SET status = %s, reviewer = %s
-                WHERE {" AND ".join(filters)}
+                WHERE {" AND ".join(filters)} AND status = 'pending'
                 RETURNING approval_id, run_id, action, reason, risk_level, status,
                           reviewer, tenant_id, requester_id
                 """,
@@ -172,6 +192,28 @@ class PostgresApprovalService:
         with self.psycopg.connect(self.database_url) as connection:
             rows = connection.execute(sql, params).fetchall()
         return [_approval_from_row(row) for row in rows]
+
+    def get(self, approval_id: str, tenant_id: str | None = None) -> ApprovalRecord | None:
+        filters = ["approval_id = %s"]
+        params: list[str] = [approval_id]
+        if tenant_id:
+            filters.append("tenant_id = %s")
+            params.append(tenant_id)
+        with self.psycopg.connect(self.database_url) as connection:
+            row = connection.execute(
+                "SELECT approval_id, run_id, action, reason, risk_level, status, reviewer, tenant_id, requester_id FROM approvals WHERE "
+                + " AND ".join(filters),
+                tuple(params),
+            ).fetchone()
+        return _approval_from_row(row) if row else None
+
+    def delete_for_run(self, run_id: str, tenant_id: str) -> int:
+        with self.psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                "DELETE FROM approvals WHERE run_id = %s AND tenant_id = %s RETURNING approval_id",
+                (run_id, tenant_id),
+            ).fetchall()
+        return len(rows)
 
     def find_for_run_action(
         self,

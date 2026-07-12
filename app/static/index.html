@@ -3,220 +3,152 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ResearchOps 智能研究控制台</title>
+    <title>ResearchOps</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="mark">R</span>
-          <div>
-            <h1>ResearchOps</h1>
-            <p>可审计智能研究工作流</p>
-          </div>
+    <main class="app-shell" id="app-shell">
+      <aside class="sidebar" aria-label="工作区导航">
+        <div class="sidebar-header">
+          <a class="brand" href="#ask" aria-label="ResearchOps 首页">
+            <span class="brand-mark" aria-hidden="true">R</span>
+            <span>ResearchOps</span>
+          </a>
+          <button id="sidebar-toggle" class="icon-button desktop-only" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
         </div>
+
+        <button id="new-task" class="new-task" type="button"><span aria-hidden="true">+</span><span class="nav-label">新建研究</span></button>
 
         <nav class="nav" aria-label="主导航">
-          <a href="#ask">提问</a>
-          <a href="#ingest">资料</a>
-          <a href="#tasks">任务</a>
-          <a href="#trace">追踪</a>
-          <a href="#audit">审计</a>
-          <a href="#admin">管理</a>
+          <a class="active" href="#ask"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /><path d="M8 10h8M8 14h5" /></svg><span class="nav-label">研究</span></a>
+          <a href="#ingest"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" /></svg><span class="nav-label">资料</span></a>
+          <a id="governance-nav" href="#operations"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7-8 9-4.5-2-8-4-8-9V5l8-3 8 3z" /><path d="m9 12 2 2 4-4" /></svg><span class="nav-label">待处理事项</span><span id="approval-count" class="nav-count" hidden>0</span></a>
         </nav>
 
-        <div class="sidebar-card">
-          <span>当前运行模式</span>
-          <strong id="sidebar-runtime">本地优先</strong>
-          <p id="sidebar-store">存储后端检测中</p>
+        <div class="sidebar-section">
+          <p class="sidebar-label">最近研究</p>
+          <div id="history-list" class="history-list"><span class="empty">暂无研究记录</span></div>
         </div>
 
-        <button id="refresh" class="ghost" type="button">刷新</button>
+        <div class="sidebar-bottom">
+          <details class="auth-drawer">
+            <summary><span class="avatar">A</span><span class="nav-label"><strong id="sidebar-user">本地工作区</strong><small id="sidebar-runtime">正在连接</small></span></summary>
+            <form id="login-form" class="login-form">
+              <label>API Key<input id="api-key" type="password" placeholder="可选" autocomplete="off" /></label>
+              <label>用户<input id="login-user" type="text" placeholder="可选" autocomplete="username" /></label>
+              <label>密码<input id="login-password" type="password" placeholder="可选" autocomplete="current-password" /></label>
+              <button class="secondary" type="submit">更新凭证</button>
+            </form>
+          </details>
+        </div>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
-          <div>
-            <p class="eyebrow">Agent Operations Console</p>
-            <h2>研究任务工作台</h2>
-            <p>资料接入、结构化计划、工具审计、审批和评测集中在一个工作区。</p>
+          <div class="crumb"><span class="online-dot" aria-hidden="true"></span><span>研究工作区</span><span class="crumb-separator">/</span><span id="status" data-state="ready">就绪</span></div>
+          <div class="topbar-actions">
+            <button id="refresh" class="icon-button" type="button" aria-label="刷新工作区" title="刷新工作区"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5.5" /><path d="M20 4v7h-7" /></svg></button>
+            <button id="context-toggle" class="icon-button mobile-context" type="button" aria-label="打开上下文" title="打开上下文"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h18M3 12h18M3 19h18" /></svg></button>
           </div>
-          <form id="login-form" class="login-card">
-            <label>
-              <span>API Key / Token</span>
-              <input id="api-key" type="password" placeholder="粘贴访问凭证" />
-            </label>
-            <label>
-              <span>用户</span>
-              <input id="login-user" type="text" placeholder="可选" />
-            </label>
-            <label>
-              <span>密码</span>
-              <input id="login-password" type="password" placeholder="可选" />
-            </label>
-            <button class="secondary small" type="submit">登录</button>
-            <div id="status" class="status" data-state="ready">就绪</div>
-          </form>
         </header>
 
-        <section class="metrics" aria-label="运行指标">
-          <div class="metric"><span>文档</span><strong id="metric-docs">0</strong></div>
-          <div class="metric"><span>分块</span><strong id="metric-chunks">0</strong></div>
-          <div class="metric"><span>运行</span><strong id="metric-runs">0</strong></div>
-          <div class="metric accent"><span>引用覆盖</span><strong id="metric-coverage">0.00</strong></div>
-        </section>
+        <section class="conversation" id="ask">
+          <div class="welcome" id="welcome">
+            <p id="welcome-eyebrow" class="eyebrow">RESEARCHOPS</p>
+            <h1 id="welcome-title">今天想研究什么？</h1>
+            <p id="welcome-copy">从已接入的资料中检索证据，生成可追溯的研究结论。</p>
+            <p class="case-proof" aria-label="ResearchOps 核心保障"><span>引用可核验</span><span>操作受控</span><span>审批可恢复</span></p>
+            <div id="suggestions" class="suggestions">
+              <button class="suggestion" type="button" data-prompt="请基于资料库说明研究结论如何做到可追溯，并给出引用。"><span>总结已接入资料</span><small>给出结论与证据</small></button>
+              <button class="suggestion" type="button" data-prompt="请比较已接入资料中的主要观点，并说明存在分歧的地方。"><span>比较资料观点</span><small>识别共识与分歧</small></button>
+              <button class="suggestion" type="button" data-prompt="请基于资料库生成研究摘要，列出下一步需要补充验证的信息。"><span>生成研究摘要</span><small>给出待验证事项</small></button>
+            </div>
+          </div>
 
-        <section class="command-grid">
-          <article class="panel ask-panel" id="ask">
-            <div class="panel-head clean">
-              <div>
-                <h3>智能提问</h3>
-                <p>基于已索引资料生成带引用的回答，并按风险进入审批。</p>
+          <div id="answer-area" class="answer-area" hidden>
+            <article class="message user-message"><div class="message-avatar">你</div><div id="question-preview" class="message-content"></div></article>
+            <article class="message agent-message"><div class="message-avatar research-avatar">R</div><div class="message-content"><div class="message-label">ResearchOps</div><div id="answer-context" class="answer-context" hidden></div><section class="answer-section"><h2>研究结论</h2><pre id="answer"></pre></section><div id="citations" class="citations"></div><section id="next-step" class="next-step" hidden><h2>建议下一步</h2><p id="next-step-copy"></p></section><div id="answer-provenance" class="answer-provenance" hidden><button id="view-run-details" class="text-button" type="button">查看证据与运行记录</button><button id="export-answer" class="text-button" type="button">导出研究记录</button></div></div></article>
+            <section id="agent-loop" class="agent-loop" aria-label="Agent 闭环状态" hidden></section>
+            <section id="plan-section" class="run-details" hidden><div class="run-details-head"><span>执行计划</span><span id="run-id">当前运行</span></div><div id="plan-list" class="timeline"></div></section>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="composer" aria-label="研究提问">
+              <textarea id="question" rows="1" placeholder="向 ResearchOps 提问"></textarea>
+              <div class="composer-footer">
+                <div class="composer-tools">
+                  <button id="attach-button" class="tool-button" type="button" title="接入新资料"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21.4 11.6-8.7 8.7a6 6 0 0 1-8.5-8.5l9.4-9.4a4 4 0 0 1 5.7 5.7l-9.4 9.4a2 2 0 0 1-2.8-2.8l8.7-8.7" /></svg><span>接入</span></button>
+                  <button id="mode-button" class="tool-button" type="button" title="更多研究选项" aria-expanded="false"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" /></svg><span id="mode-label">更多</span><span id="mode-status">证据</span></button>
+                  <button id="scope-button" class="tool-button" type="button" title="限定本次检索范围"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10" /></svg><span id="scope-label">限定资料</span></button>
+                </div>
+                <button id="ask-button" class="send-button" type="button" aria-label="运行研究" title="运行研究"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 5v14" /></svg></button>
               </div>
-              <span id="run-id" class="pill">暂无运行</span>
             </div>
-            <textarea id="question" placeholder="例如：ResearchOps Agent 支持哪些能力？请给出引用。"></textarea>
-            <div class="prompt-row">
-              <button class="chip" data-prompt="ResearchOps Agent 支持哪些能力？" type="button">能力概览</button>
-              <button class="chip" data-prompt="计算 12 * (3 + 4)，并查看知识库文档数量" type="button">工具调用</button>
-              <button class="chip" data-prompt="生成一份带引用的项目分析报告" type="button">研究报告</button>
-              <button class="chip danger" data-prompt="请删除所有生产数据" type="button">审批测试</button>
+            <div id="mode-panel" class="mode-panel" hidden role="menu" aria-label="更多研究选项">
+              <button type="button" class="mode-option active" data-mode="evidence" role="menuitem"><strong>证据研究</strong><small>结论附带来源与引用</small></button>
+              <button type="button" class="mode-option" data-mode="quick" role="menuitem"><strong>快速回答</strong><small>优先给出简洁直接的答案</small></button>
+              <button type="button" class="mode-option" data-mode="report" role="menuitem"><strong>研究摘要</strong><small>结论、证据、不确定性与下一步</small></button>
             </div>
-            <button id="ask-button" class="primary" type="button">运行任务</button>
-          </article>
+            <div id="scope-panel" class="scope-panel" hidden><div class="scope-head"><div><strong>限定本次检索范围</strong><small id="scope-count">默认检索全部资料</small></div><div class="scope-actions"><button id="scope-restore" class="text-button" type="button" hidden>复用上次范围</button><button id="scope-clear" class="text-button" type="button">使用全部资料</button></div></div><div class="scope-filter"><input id="scope-search" type="search" placeholder="搜索资料或来源" aria-label="搜索本次检索范围" /><button id="scope-select-all" class="text-button" type="button">全选结果</button></div><div id="scope-list" class="scope-list"></div></div>
+            <div id="run-progress" class="run-progress" role="status" aria-live="polite" hidden><span class="progress-dot" aria-hidden="true"></span><span id="run-progress-text">正在规划研究问题</span></div>
+            <p id="composer-note" class="composer-note">ResearchOps 可能出错，请核验关键结论与引用。</p>
+          </div>
+        </section>
 
-          <article class="panel ingest-panel" id="ingest">
-            <div class="panel-head clean">
-              <div>
-                <h3>资料接入</h3>
-                <p>上传文件、抓取 URL、索引 GitHub 仓库或粘贴研究笔记。</p>
+        <section class="utility-area">
+          <details id="ingest" class="utility-panel">
+            <summary><span><strong>接入资料</strong><small id="sidebar-store">上传文件、索引 URL、GitHub 仓库或研究笔记</small></span><span class="summary-action">展开</span></summary>
+            <div class="utility-body">
+              <div class="ingest-tabs" role="tablist" aria-label="资料接入方式">
+                <button class="ingest-tab active" type="button" role="tab" aria-selected="true" data-ingest-tab="file">文件</button>
+                <button class="ingest-tab" type="button" role="tab" aria-selected="false" data-ingest-tab="url">URL</button>
+                <button class="ingest-tab" type="button" role="tab" aria-selected="false" data-ingest-tab="repo">GitHub</button>
+                <button class="ingest-tab" type="button" role="tab" aria-selected="false" data-ingest-tab="text">笔记</button>
               </div>
+              <div id="ingest-pane-file" class="ingest-pane active" data-ingest-pane="file"><form id="file-ingest" class="ingest-form"><label>选择 PDF、Markdown、文本、HTML 或 CSV<input id="file-input" type="file" accept=".pdf,.txt,.md,.html,.csv" /></label><button class="primary" type="submit">建立索引</button></form></div>
+              <div id="ingest-pane-url" class="ingest-pane" data-ingest-pane="url" hidden><form id="url-ingest" class="ingest-form"><input id="url-input" type="url" placeholder="https://example.com/research" /><button class="primary" type="submit">抓取并索引</button></form></div>
+              <div id="ingest-pane-repo" class="ingest-pane" data-ingest-pane="repo" hidden><form id="repo-ingest" class="ingest-form"><input id="repo-input" type="url" placeholder="https://github.com/owner/repo" /><input id="repo-ref" type="text" placeholder="分支，默认 main" /><button class="primary" type="submit">索引仓库</button></form></div>
+              <div id="ingest-pane-text" class="ingest-pane" data-ingest-pane="text" hidden><form id="text-ingest" class="ingest-form note-form"><input id="text-title" type="text" placeholder="资料标题" /><textarea id="text-body" placeholder="粘贴研究笔记或项目说明"></textarea><button class="primary" type="submit">保存到资料库</button></form></div>
             </div>
+          </details>
 
-            <div class="ingest-list">
-              <form id="file-ingest" class="ingest-row">
-                <div><strong>文件上传</strong><span>PDF、Markdown、文本、HTML、CSV</span></div>
-                <input id="file-input" type="file" accept=".pdf,.txt,.md,.html,.csv" />
-                <button class="secondary small" type="submit">索引</button>
-              </form>
-
-              <form id="url-ingest" class="ingest-row">
-                <div><strong>公开 URL</strong><span>异步抓取并进行网络边界校验</span></div>
-                <input id="url-input" type="url" placeholder="https://example.com/research" />
-                <button class="secondary small" type="submit">抓取</button>
-              </form>
-
-              <form id="repo-ingest" class="ingest-row repo-row">
-                <div><strong>GitHub 仓库</strong><span>索引公开仓库文本和代码</span></div>
-                <input id="repo-input" type="url" placeholder="https://github.com/owner/repo" />
-                <input id="repo-ref" type="text" placeholder="main" />
-                <button class="secondary small" type="submit">索引</button>
-              </form>
-
-              <form id="text-ingest" class="ingest-row text-row">
-                <div><strong>粘贴笔记</strong><span>研究记录或项目说明</span></div>
-                <input id="text-title" type="text" placeholder="标题" />
-                <textarea id="text-body" placeholder="粘贴资料内容"></textarea>
-                <button class="secondary small" type="submit">索引</button>
-              </form>
+          <details id="operations" class="utility-panel governance-panel">
+            <summary><span><strong>待处理事项与运行记录</strong><small>处理审批、查看失败任务和运行依据；系统设置仅对管理员显示</small></span><span class="summary-action">展开</span></summary>
+            <div class="ops-grid utility-body primary-ops">
+              <section id="tasks" class="ops-section"><div class="ops-title"><h2>任务队列</h2><button id="recover-tasks" class="text-button" type="button">恢复卡住任务</button></div><div id="tasks-list" class="list">暂无任务</div></section>
+              <section id="approvals" class="ops-section"><div class="ops-title"><h2>人工审批</h2></div><div id="approvals-list" class="list">暂无审批</div></section>
             </div>
-          </article>
-        </section>
-
-        <section class="results-grid">
-          <article class="panel answer-panel">
-            <div class="panel-head"><div><h3>回答</h3><p>检索、工具和审批后的最终输出。</p></div></div>
-            <pre id="answer">还没有回答。可以先接入资料，或直接发起一次提问。</pre>
-          </article>
-          <article class="panel">
-            <div class="panel-head"><div><h3>计划</h3><p>Planner 输出的阶段、风险和工具意图。</p></div></div>
-            <div id="plan-list" class="timeline empty">暂无计划</div>
-          </article>
-          <article class="panel">
-            <div class="panel-head"><div><h3>引用</h3><p>回答使用的证据片段。</p></div></div>
-            <div id="citations" class="list empty">暂无引用</div>
-          </article>
-        </section>
-
-        <section class="ops-grid">
-          <article class="panel" id="tasks">
-            <div class="panel-head">
-              <div><h3>任务队列</h3><p>异步接入、评测、取消和重试状态。</p></div>
-              <button id="recover-tasks" class="secondary small" type="button">恢复卡住任务</button>
-            </div>
-            <div id="tasks-list" class="list empty">暂无任务</div>
-          </article>
-
-          <article class="panel" id="trace">
-            <div class="panel-head"><div><h3>运行追踪</h3><p>步骤耗时、状态和错误。</p></div></div>
-            <div id="trace-list" class="timeline empty">暂无追踪</div>
-          </article>
-
-          <article class="panel" id="approvals">
-            <div class="panel-head"><div><h3>人工审批</h3><p>高风险操作的决策入口。</p></div></div>
-            <div id="approvals-list" class="list empty">暂无审批</div>
-          </article>
-
-          <article class="panel" id="audit">
-            <div class="panel-head"><div><h3>审计日志</h3><p>工具调用、风险等级和执行结果。</p></div></div>
-            <form id="audit-filter" class="filter-row">
-              <select id="audit-risk">
-                <option value="">全部风险</option>
-                <option value="low">低风险</option>
-                <option value="medium">中风险</option>
-                <option value="high">高风险</option>
-                <option value="critical">严重风险</option>
-              </select>
-              <select id="audit-status">
-                <option value="">全部状态</option>
-                <option value="completed">已完成</option>
-                <option value="failed">失败</option>
-                <option value="pending">等待中</option>
-              </select>
-              <input id="audit-target" type="text" placeholder="目标" />
-              <button class="secondary small" type="submit">筛选</button>
-            </form>
-            <div id="audit-list" class="list empty">暂无审计</div>
-          </article>
-
-          <article class="panel" id="eval">
-            <div class="panel-head">
-              <div><h3>评测门禁</h3><p>RAG、工具和安全行为回归检查。</p></div>
-              <button id="run-eval" class="secondary small" type="button">运行评测</button>
-            </div>
-            <div id="eval-list" class="list"></div>
-          </article>
-
-          <article class="panel" id="documents">
-            <div class="panel-head"><div><h3>资料库</h3><p>当前租户可用资料。</p></div></div>
-            <div id="documents-list" class="list empty">暂无资料</div>
-          </article>
-
-          <article class="panel" id="admin">
-            <div class="panel-head"><div><h3>系统配置</h3><p>运行后端、权限矩阵和关键限制。</p></div></div>
-            <div id="system-list" class="list empty">暂无配置</div>
-          </article>
-
-          <article class="panel" id="users">
-            <div class="panel-head">
-              <div><h3>用户与角色</h3><p>本地租户用户管理。</p></div>
-            </div>
-            <form id="user-create" class="user-form">
-              <input id="new-user-id" type="text" placeholder="用户 ID" />
-              <input id="new-user-password" type="password" placeholder="密码" />
-              <select id="new-user-role">
-                <option value="viewer">viewer</option>
-                <option value="editor">editor</option>
-                <option value="admin">admin</option>
-              </select>
-              <button class="secondary small" type="submit">创建</button>
-            </form>
-            <div id="users-list" class="list empty">暂无用户</div>
-          </article>
+            <details id="advanced-ops" class="advanced-ops"><summary>系统与审计</summary><div class="ops-grid utility-body">
+              <section id="trace" class="ops-section"><div class="ops-title"><h2>运行追踪</h2></div><div id="trace-list" class="timeline">暂无追踪</div></section>
+              <section id="metrics" class="ops-section"><div class="ops-title"><h2>运行指标</h2><small>当前租户</small></div><div id="metrics-list" class="metrics-grid">正在加载指标</div></section>
+              <section id="audit" class="ops-section"><div class="ops-title"><h2>审计日志</h2></div><form id="audit-filter" class="filter-row"><select id="audit-risk"><option value="">全部风险</option><option value="low">低风险</option><option value="medium">中风险</option><option value="high">高风险</option><option value="critical">严重风险</option></select><select id="audit-status"><option value="">全部状态</option><option value="completed">已完成</option><option value="failed">失败</option><option value="pending">等待中</option></select><input id="audit-target" type="text" placeholder="目标" /><button class="secondary" type="submit">筛选</button></form><div id="audit-list" class="list">暂无审计</div></section>
+              <section id="eval" class="ops-section"><div class="ops-title"><h2>评测门禁</h2><button id="run-eval" class="text-button" type="button">运行评测</button></div><div id="eval-list" class="list"></div></section>
+              <section id="admin" class="ops-section"><div class="ops-title"><h2>系统配置</h2></div><div id="system-list" class="list">暂无配置</div></section>
+              <section id="users" class="ops-section"><div class="ops-title"><h2>用户与角色</h2></div><form id="user-create" class="user-form"><input id="new-user-id" type="text" placeholder="用户 ID" /><input id="new-user-password" type="password" placeholder="密码" /><select id="new-user-role"><option value="viewer">viewer</option><option value="editor">editor</option><option value="admin">admin</option></select><button class="secondary" type="submit">创建</button></form><div id="users-list" class="list">暂无用户</div></section>
+            </div></details>
+          </details>
         </section>
       </section>
+
+      <nav class="mobile-nav" aria-label="移动导航">
+        <button type="button" class="active" data-mobile-nav="ask">研究</button>
+        <button type="button" data-mobile-nav="ingest">资料</button>
+        <button type="button" data-mobile-nav="operations">待处理 <span id="mobile-approval-count" hidden>0</span></button>
+      </nav>
+
+      <div id="context-scrim" class="context-scrim" hidden></div>
+      <aside class="context-panel" id="context-panel" aria-label="研究上下文">
+        <div class="context-head"><strong>研究上下文</strong><button id="context-close" class="icon-button mobile-context" type="button" aria-label="关闭上下文"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+        <section class="context-section current-scope-section"><p class="context-label">本次资料范围</p><strong id="context-scope">默认检索全部资料</strong><small>范围仅影响下一次研究</small></section>
+        <section class="context-section attention-section"><div class="context-title"><p class="context-label">需要你的决定</p><a href="#operations" data-scroll-to="approvals">查看全部</a></div><div id="attention-list" class="attention-list">暂无需要处理的事项</div></section>
+        <section class="context-section"><div class="context-title"><p class="context-label">已接入资料</p><a href="#ingest">管理</a></div><div class="document-filters"><input id="document-search" type="search" placeholder="搜索资料" aria-label="搜索资料" /><select id="document-source" aria-label="按来源筛选"><option value="">全部来源</option></select></div><div id="documents-list" class="compact-list">暂无资料</div></section>
+      </aside>
     </main>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="detail-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title" hidden><div class="modal-backdrop" data-close-modal="true"></div><section class="modal-surface"><div class="modal-head"><div><p id="detail-modal-kicker" class="context-label">详情</p><h2 id="detail-modal-title">运行详情</h2></div><button class="icon-button" type="button" data-close-modal="true" aria-label="关闭详情"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div><div id="detail-modal-body" class="modal-body"></div></section></div>
     <script src="/app.js"></script>
   </body>
 </html>

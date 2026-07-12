@@ -12,9 +12,129 @@ def test_dashboard_smoke() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "研究任务工作台" in response.text
+    assert "ResearchOps" in response.text
     assert "资料接入" in response.text
     assert "审计日志" in response.text
+
+
+def test_run_history_api_returns_persisted_answers() -> None:
+    ask_response = client.post(
+        "/api/ask",
+        json={"question": "calculate 3 + 4", "corpus_ids": [], "require_citations": False},
+    )
+
+    assert ask_response.status_code == 200
+    run_id = ask_response.json()["run_id"]
+    runs_response = client.get("/api/runs")
+
+    assert runs_response.status_code == 200
+    run = next(item for item in runs_response.json() if item["run_id"] == run_id)
+    assert run["answer"]
+    assert run["plan_details"]
+
+
+def test_approved_run_can_resume_through_the_api() -> None:
+    pending_response = client.post(
+        "/api/ask",
+        json={"question": "Please delete this temporary record", "corpus_ids": []},
+    )
+
+    assert pending_response.status_code == 200
+    pending = pending_response.json()
+    approval_response = client.post(
+        f"/api/approvals/{pending['approval_id']}/decision",
+        json={"approved": True, "reviewer": "api-smoke"},
+    )
+    assert approval_response.status_code == 200
+
+    resumed_response = client.post(f"/api/runs/{pending['run_id']}/resume")
+
+    assert resumed_response.status_code == 200
+    resumed = resumed_response.json()
+    assert resumed["run_id"] == pending["run_id"]
+    assert resumed["requires_approval"] is False
+
+
+def test_rejected_approval_terminalizes_its_run() -> None:
+    pending_response = client.post(
+        "/api/ask",
+        json={"question": "Please delete this rejected fixture", "corpus_ids": []},
+    )
+    pending = pending_response.json()
+    decision_response = client.post(
+        f"/api/approvals/{pending['approval_id']}/decision",
+        json={"approved": False, "reviewer": "api-smoke"},
+    )
+
+    assert decision_response.status_code == 200
+    run = next(item for item in client.get("/api/runs").json() if item["run_id"] == pending["run_id"])
+    assert run["status"] == "rejected"
+    assert client.post(
+        f"/api/approvals/{pending['approval_id']}/decision",
+        json={"approved": True, "reviewer": "api-smoke"},
+    ).status_code == 409
+    assert client.post(f"/api/runs/{pending['run_id']}/cancel").status_code == 409
+
+
+def test_research_run_delete_removes_related_data() -> None:
+    pending_response = client.post(
+        "/api/ask",
+        json={"question": "Please delete this run deletion fixture", "corpus_ids": []},
+    )
+    pending = pending_response.json()
+    run_id = pending["run_id"]
+
+    delete_response = client.delete(f"/api/runs/{run_id}")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert all(item["run_id"] != run_id for item in client.get("/api/runs").json())
+    assert not any(item["run_id"] == run_id for item in client.get("/api/approvals").json())
+    assert client.get(f"/api/runs/{run_id}/trace").status_code == 404
+    assert client.get(f"/api/audit/replay/{run_id}").status_code == 404
+    assert not client.get(f"/api/audit?run_id={run_id}").json()
+
+
+def test_p0_contract_and_metrics_endpoints_are_visible() -> None:
+    ask_response = client.post(
+        "/api/ask",
+        json={"question": "calculate 4 + 5", "corpus_ids": [], "require_citations": False},
+    )
+    assert ask_response.status_code == 200
+    payload = ask_response.json()
+    assert payload["final_answer"]["model"] == "deterministic-rag"
+    assert payload["tool_calls"][0]["idempotency_key"]
+
+    run_id = payload["run_id"]
+    trace = client.get(f"/api/runs/{run_id}/trace")
+    assert trace.status_code == 200
+    assert trace.json()["steps"][0]["input_payload"]
+    tools = client.get(f"/api/runs/{run_id}/tools")
+    assert tools.status_code == 200
+    assert tools.json()[0]["status"] == "completed"
+
+    metrics = client.get("/api/metrics")
+    assert metrics.status_code == 200
+    assert "p95_latency_ms" in metrics.json()
+    contracts = client.get("/api/contracts")
+    assert contracts.status_code == 200
+    assert "tool_call" in contracts.json()
+
+
+def test_document_delete_removes_indexed_document() -> None:
+    ingest_response = client.post(
+        "/api/ingest/text",
+        json={"title": "Delete Fixture", "text": "Temporary indexed content.", "source": "delete-test"},
+    )
+
+    assert ingest_response.status_code == 200
+    document_id = ingest_response.json()["document_id"]
+    delete_response = client.delete(f"/api/documents/{document_id}")
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    documents_response = client.get("/api/documents")
+    assert all(item["document_id"] != document_id for item in documents_response.json())
 
 
 def test_health_response_has_security_and_request_headers() -> None:

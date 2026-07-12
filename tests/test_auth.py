@@ -102,3 +102,34 @@ def test_admin_can_create_and_delete_tenant_user(monkeypatch) -> None:
 
     delete_response = client.delete("/api/users/new-user", headers={"X-API-Key": "admin-key"})
     assert delete_response.status_code == 200
+
+
+def test_viewer_cannot_run_evaluations(monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "api_keys_json",
+        json.dumps(
+            [{"key": "viewer-key", "user_id": "viewer", "tenant_id": "tenant-a", "role": "viewer"}]
+        ),
+    )
+
+    response = client.post("/api/eval/run", headers={"X-API-Key": "viewer-key"})
+
+    assert response.status_code == 403
+
+
+def test_evaluation_does_not_write_to_the_callers_tenant(monkeypatch) -> None:
+    from app.evals.service import eval_service
+    from app.rag.store import knowledge_store
+    from app.core.traces import trace_store
+    from app.core.security import UserContext
+
+    user = UserContext(user_id="eval-user", tenant_id="eval-isolation", role="editor")
+    before_documents = knowledge_store.list_documents(user.tenant_id)
+    before_runs = trace_store.list_runs(user.tenant_id, limit=1000)
+
+    response = asyncio.run(eval_service.run_golden(user))
+
+    assert response.total_cases
+    assert knowledge_store.list_documents(user.tenant_id) == before_documents
+    assert trace_store.list_runs(user.tenant_id, limit=1000) == before_runs
