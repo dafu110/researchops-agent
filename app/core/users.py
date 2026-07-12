@@ -1,5 +1,4 @@
 import hashlib
-import json
 import secrets
 from pathlib import Path
 from threading import Lock

@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
