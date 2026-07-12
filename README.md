@@ -50,7 +50,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ## 核心能力
 
-### 架构与实现
+## 架构与实现
 
 ```mermaid
 flowchart LR
