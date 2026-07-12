@@ -50,6 +50,11 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ## 核心能力
 
+- 引用式问答与检索证据校验，避免将未经支持的内容作为研究结论。
+- 结构化计划、受限工具调用、超时与幂等记录，以及可恢复的人工审批流程。
+- 运行 trace、审计记录、指标和 Pydantic/JSON Schema 契约，便于复盘与评测。
+- 文档、URL、GitHub 内容导入与异步任务；本地可使用 JSON 回退，生产目标为 PostgreSQL + pgvector。
+
 ## 架构与实现
 
 ```mermaid
@@ -79,6 +84,14 @@ python scripts\run_agent_self_check.py
 评测门禁包含 32 条案例，覆盖引用、越权资料、提示注入、高风险工具、审批拒绝/恢复、工具超时、结构化契约与运行指标。
 
 ## 部署与生产
+
+Docker Compose 提供 API、Celery worker、PostgreSQL + pgvector 和 Redis 的本地联调环境：
+
+```powershell
+docker compose up --build
+```
+
+启动前复制 `.env.example` 为 `.env`，并按目标环境替换数据库、模型、认证、MCP 和 sandbox 配置。服务入口为 `http://127.0.0.1:8000/health`。
 
 ## 生产边界
 
