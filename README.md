@@ -11,7 +11,8 @@
 
 ## 界面预览
 
-![ResearchOps workspace](docs/assets/dashboard.png)
+<img width="1529" height="857" alt="researchops-dashboard" src="https://github.com/user-attachments/assets/1acedec5-a7fa-4a4b-8ecc-a2840e32705d" />
+
 
 ## 快速开始
 
